@@ -1,6 +1,6 @@
 # EZchain: A Secure Scalable Blockchain Protocol via Passive Sharding
 
-===========（Please skip to the next horizontal line to view the API and other documents）============
+======（Please skip to the next horizontal line to view the API and other documents）======
 
 EZchain is a layer-1 blockchain protocol that aims to "scale-out."
 ---
@@ -16,3 +16,5 @@ EZchain是一个Layer-1层的区块链协议，旨在达到“无限扩展”的
 
 ==================================================================
 
+目前的开发还以实验测试为主，公开的文件也是EZchain的模拟实验代码。
+本人coding能力黑铁，十分欢迎感兴趣的小伙伴加入我们！！！

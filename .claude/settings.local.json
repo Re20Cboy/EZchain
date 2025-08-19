@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(timeout:*)"
+    ],
+    "deny": [],
+    "ask": []
+  },
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "020a58c1c41d440b88f5460dea0a4451.LVDnXtXRn1v0nQvu",
+    "ANTHROPIC_MODEL": "glm-4.5-air",
+    "ANTHROPIC_SMALL_FAST_MODEL": "glm-4.5-air"
+  }
+}

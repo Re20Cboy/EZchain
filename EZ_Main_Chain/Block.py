@@ -1,7 +1,12 @@
-#from const import *
-from Bloom import BloomFilter,BloomFilterEncoder
+import sys
+import os
+
+# Add the project root to Python path
+sys.path.insert(0, os.path.dirname(__file__) + '/..')
+
+from EZ_Block_Units.Bloom import BloomFilter,BloomFilterEncoder
 import datetime
-import unit
+# import unit
 import hashlib
 import json
 import pickle

@@ -5,8 +5,8 @@ import os
 sys.path.insert(0, os.path.dirname(__file__) + '/..')
 
 from EZ_Block_Units.Bloom import BloomFilter,BloomFilterEncoder
+from EZ_Block_Units.MerkleTree import MerkleTree,MerkleTreeNode
 import datetime
-# import unit
 import hashlib
 import json
 import pickle

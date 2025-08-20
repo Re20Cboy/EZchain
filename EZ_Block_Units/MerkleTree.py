@@ -11,7 +11,7 @@ import hashlib
 
 # TODO: 默克尔树构造前的数据类型检查。
 
-class merkle_tree_node:
+class MerkleTreeNode:
     def __init__(self, left, right, value, content=None, path=[], leaf_index=None):
         self.left = left
         self.right = right
@@ -21,22 +21,18 @@ class merkle_tree_node:
         self.leaf_index = leaf_index
         self.father = None
 
-    @staticmethod
-    def hash(val):
-        return sha256_hash(val)
-
     def __str__(self):
         return str(self.value)
 
 
-class merkle_tree:
+class MerkleTree:
     def __init__(self, values, is_genesis_block=False):
         self.leaves = []
         self.prf_list = None
         self.build_tree(values, is_genesis_block)
 
     def build_tree(self, leaves, is_genesis_block):
-        leaves = [merkle_tree_node(None, None, merkle_tree_node.hash(e), e, leaf_index=index) for index, e in
+        leaves = [MerkleTreeNode(None, None, sha256_hash(e), e, leaf_index=index) for index, e in
                   enumerate(leaves, start=0)]
 
         for item in leaves:
@@ -65,11 +61,11 @@ class merkle_tree:
                     leaves[0].path = [pop_leave_num]
                     pop_leave_num += 1
                 right = leaves.pop(0)
-                value = merkle_tree_node.hash(left.value + right.value)
+                value = sha256_hash(left.value + right.value)
                 com_path = left.path + right.path
                 left.path = com_path
                 right.path = com_path
-                new_mtree_node = merkle_tree_node(left, right, value, path=com_path)
+                new_mtree_node = MerkleTreeNode(left, right, value, path=com_path)
                 left.father = new_mtree_node
                 right.father = new_mtree_node
                 leaves.append(new_mtree_node)
@@ -110,12 +106,12 @@ class merkle_tree:
         if node is None:
             node = self.root
         if node.left is not None and node.right is not None:
-            if node.value != merkle_tree_node.hash(node.left.value + node.right.value):
+            if node.value != sha256_hash(node.left.value + node.right.value):
                 return False
             else:
                 return (self.check_tree(node=node.left) and self.check_tree(node=node.right))
         else:
-            if node.value != merkle_tree_node.hash(node.content):
+            if node.value != sha256_hash(node.content):
                 return False
         return True
 

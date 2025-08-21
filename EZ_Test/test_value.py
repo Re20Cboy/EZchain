@@ -28,14 +28,14 @@ class TestValueInitialization(unittest.TestCase):
         
     def test_valid_initialization(self):
         """Test valid Value initialization."""
-        self.assertEqual(self.value.beginIndex, self.valid_begin)
-        self.assertEqual(self.value.valueNum, self.valid_num)
-        self.assertEqual(self.value.endIndex, "0x1063")  # 0x1000 + 100 - 1 = 0x1063
+        self.assertEqual(self.value.begin_index, self.valid_begin)
+        self.assertEqual(self.value.value_num, self.valid_num)
+        self.assertEqual(self.value.end_index, "0x1063")  # 0x1000 + 100 - 1 = 0x1063
         
     def test_hex_conversion(self):
         """Test hexadecimal conversion methods."""
-        decimal_begin = self.value.get_decimal_beginIndex()
-        decimal_end = self.value.get_decimal_endIndex()
+        decimal_begin = self.value.get_decimal_begin_index()
+        decimal_end = self.value.get_decimal_end_index()
         
         self.assertEqual(decimal_begin, 4096)  # 0x1000 = 4096
         self.assertEqual(decimal_end, 4195)    # 0x1063 = 4195
@@ -52,7 +52,7 @@ class TestValueInitialization(unittest.TestCase):
         output = f.getvalue()
         
         self.assertIn('value #begin:' + str(self.valid_begin), output)
-        self.assertIn('value #end:' + str(self.value.endIndex), output)
+        self.assertIn('value #end:' + str(self.value.end_index), output)
         self.assertIn('value num:' + str(self.valid_num), output)
 
 
@@ -62,33 +62,34 @@ class TestValueValidation(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures before each test method."""
         self.valid_value = Value("0x1000", 100)
-        self.invalid_value_num = Value("0x1000", 0)
-        self.invalid_value_begin = Value("invalid_hex", 100)
-        self.invalid_value_end = Value("0x1000", 100)  # Will be modified
+        # Note: invalid_value_num, invalid_value_begin are created in respective tests due to exceptions
+        self.valid_value_modified = Value("0x1000", 100)  # Will be modified
         
     def test_valid_value(self):
         """Test validation of valid Value objects."""
         self.assertTrue(self.valid_value.check_value())
         
     def test_invalid_value_num(self):
-        """Test validation with invalid valueNum (<= 0)."""
-        self.assertFalse(self.invalid_value_num.check_value())
+        """Test that invalid valueNum (<= 0) raises ValueError in initialization."""
+        with self.assertRaises(ValueError):
+            Value("0x1000", 0)
         
     def test_invalid_hex_begin(self):
-        """Test validation with invalid hexadecimal beginIndex."""
-        self.assertFalse(self.invalid_value_begin.check_value())
+        """Test that invalid hexadecimal beginIndex raises ValueError in initialization."""
+        with self.assertRaises(ValueError):
+            Value("invalid_hex", 100)
         
     def test_invalid_hex_end(self):
         """Test validation with invalid hexadecimal endIndex."""
         # Manually set invalid endIndex to test
-        self.invalid_value_end.endIndex = "invalid"
-        self.assertFalse(self.invalid_value_end.check_value())
+        self.valid_value_modified.end_index = "invalid"
+        self.assertFalse(self.valid_value_modified.check_value())
         
     def test_end_index_consistency(self):
         """Test that endIndex calculation is consistent."""
         value = Value("0x1000", 100)
         calculated_end = value.get_end_index("0x1000", 100)
-        self.assertEqual(value.endIndex, calculated_end)
+        self.assertEqual(value.end_index, calculated_end)
 
 
 class TestValueSplitting(unittest.TestCase):
@@ -103,35 +104,24 @@ class TestValueSplitting(unittest.TestCase):
         v1, v2 = self.original_value.split_value(50)
         
         # Check first part
-        self.assertEqual(v1.beginIndex, "0x1000")
-        self.assertEqual(v1.valueNum, 150)  # 200 - 50
-        self.assertEqual(v1.endIndex, "0x10c7")  # 0x1000 + 150 - 1
+        self.assertEqual(v1.begin_index, "0x1000")
+        self.assertEqual(v1.value_num, 150)  # 200 - 50
+        self.assertEqual(v1.end_index, "0x1095")  # 0x1000 + 150 - 1
         
         # Check second part (change)
-        self.assertEqual(v2.beginIndex, "0x10c8")  # v1.endIndex + 1
-        self.assertEqual(v2.valueNum, 50)
-        self.assertEqual(v2.endIndex, "0x10e3")  # 0x10c8 + 50 - 1
+        self.assertEqual(v2.begin_index, "0x1096")  # v1.end_index + 1
+        self.assertEqual(v2.value_num, 50)
+        self.assertEqual(v2.end_index, "0x10c7")  # 0x1096 + 50 - 1
         
     def test_split_value_at_boundary(self):
-        """Test splitting at boundary conditions."""
-        # Split all into second part
-        v1, v2 = self.original_value.split_value(200)
-        
-        self.assertEqual(v1.beginIndex, "0x1000")
-        self.assertEqual(v1.valueNum, 0)  # 200 - 200
-        self.assertEqual(v1.endIndex, "0xfff")  # 0x1000 - 1
-        
-        self.assertEqual(v2.beginIndex, "0x1000")
-        self.assertEqual(v2.valueNum, 200)
-        
+        """Test that splitting with full amount raises ValueError."""
+        with self.assertRaises(ValueError):
+            self.original_value.split_value(200)
+            
     def test_split_value_no_remainder(self):
-        """Test splitting with no remainder in first part."""
-        v1, v2 = self.original_value.split_value(0)
-        
-        self.assertEqual(v1.beginIndex, "0x1000")
-        self.assertEqual(v1.valueNum, 200)
-        self.assertEqual(v2.beginIndex, "0x10c8")  # After first part
-        self.assertEqual(v2.valueNum, 0)
+        """Test that splitting with zero change raises ValueError."""
+        with self.assertRaises(ValueError):
+            self.original_value.split_value(0)
 
 
 class TestValueIntersection(unittest.TestCase):
@@ -152,17 +142,14 @@ class TestValueIntersection(unittest.TestCase):
         self.assertIsNotNone(result)
         intersect_value, rest_values = result
         
-        # Check intersection: should be 0x1080 to 0x10c7 (128 units)
-        self.assertEqual(intersect_value.beginIndex, "0x1080")
-        self.assertEqual(intersect_value.valueNum, 128)  # 0x10c7 - 0x1080 + 1
+        # Check intersection: should be 0x1080 to 0x10c7 (72 units)
+        self.assertEqual(intersect_value.begin_index, "0x1080")
+        self.assertEqual(intersect_value.value_num, 72)  # 0x10c7 - 0x1080 + 1
         
         # Check rest values: two parts before and after intersection
-        self.assertEqual(len(rest_values), 2)
-        self.assertEqual(rest_values[0].beginIndex, "0x1000")
-        self.assertEqual(rest_values[0].valueNum, 128)  # 0x1080 - 0x1000
-        
-        self.assertEqual(rest_values[1].beginIndex, "0x10c8")
-        self.assertEqual(rest_values[1].valueNum, 72)   # 0x10c7 - 0x10c8 + 1
+        self.assertEqual(len(rest_values), 1)
+        self.assertEqual(rest_values[0].begin_index, "0x1000")
+        self.assertEqual(rest_values[0].value_num, 128)  # 0x1080 - 0x1000
         
     def test_intersect_value_no_overlap(self):
         """Test intersection when no overlap exists."""
@@ -177,8 +164,8 @@ class TestValueIntersection(unittest.TestCase):
         intersect_value, rest_values = result
         
         # Intersection should be the same as value4
-        self.assertEqual(intersect_value.beginIndex, "0x1000")
-        self.assertEqual(intersect_value.valueNum, 200)
+        self.assertEqual(intersect_value.begin_index, "0x1000")
+        self.assertEqual(intersect_value.value_num, 200)
         
         # No rest values since complete overlap
         self.assertEqual(len(rest_values), 0)
@@ -259,20 +246,20 @@ class TestValueEdgeCases(unittest.TestCase):
         
     def test_single_unit_value(self):
         """Test value with only one unit."""
-        self.assertEqual(self.small_value.beginIndex, "0x1")
-        self.assertEqual(self.small_value.endIndex, "0x1")
-        self.assertEqual(self.small_value.valueNum, 1)
+        self.assertEqual(self.small_value.begin_index, "0x1")
+        self.assertEqual(self.small_value.end_index, "0x1")
+        self.assertEqual(self.small_value.value_num, 1)
         
-        # Test splitting single unit
-        v1, v2 = self.small_value.split_value(1)
-        self.assertEqual(v1.valueNum, 0)
-        self.assertEqual(v2.valueNum, 1)
+    def test_split_single_unit_value(self):
+        """Test that splitting single unit raises ValueError."""
+        with self.assertRaises(ValueError):
+            self.small_value.split_value(1)
         
     def test_large_value(self):
         """Test with large values."""
-        decimal_begin = self.large_value.get_decimal_beginIndex()
-        decimal_end = self.large_value.get_decimal_endIndex()
-        
+        decimal_begin = self.large_value.get_decimal_begin_index()
+        decimal_end = self.large_value.get_decimal_end_index()
+
         self.assertEqual(decimal_begin, 0x1000000)
         self.assertEqual(decimal_end, 0x1000000 + 1000000 - 1)
         
@@ -284,34 +271,27 @@ class TestValueEdgeCases(unittest.TestCase):
         
         # Test end index calculation
         calculated_end = large_hex_value.get_end_index("0xffff0000", 1000)
-        self.assertEqual(large_hex_value.endIndex, calculated_end)
+        self.assertEqual(large_hex_value.end_index, calculated_end)
         
     def test_zero_splitting(self):
-        """Test splitting with zero change."""
-        v1, v2 = Value("0x1000", 100).split_value(0)
-        
-        self.assertEqual(v1.beginIndex, "0x1000")
-        self.assertEqual(v1.valueNum, 100)
-        self.assertEqual(v2.beginIndex, "0x10c8")  # After v1
-        self.assertEqual(v2.valueNum, 0)
-        
+        """Test that splitting with zero change raises ValueError."""
+        with self.assertRaises(ValueError):
+            Value("0x1000", 100).split_value(0)
+            
     def test_full_splitting(self):
-        """Test splitting entire value into second part."""
-        v1, v2 = Value("0x1000", 100).split_value(100)
-        
-        self.assertEqual(v1.valueNum, 0)
-        self.assertEqual(v2.beginIndex, "0x1000")
-        self.assertEqual(v2.valueNum, 100)
+        """Test that splitting with full amount raises ValueError."""
+        with self.assertRaises(ValueError):
+            Value("0x1000", 100).split_value(100)
 
 
 class TestValueErrorHandling(unittest.TestCase):
     """Test suite for Value error handling."""
     
     def test_invalid_hex_input(self):
-        """Test handling of invalid hexadecimal inputs."""
-        # Invalid hex format
+        """Test handling of invalid hexadecimal inputs in Value initialization."""
+        # Test invalid hex format in Value constructor
         with self.assertRaises(ValueError):
-            int("invalid_hex", 16)
+            Value("invalid_hex", 100)
             
     def test_value_boundary_checks(self):
         """Test boundary conditions in value operations."""
@@ -322,6 +302,24 @@ class TestValueErrorHandling(unittest.TestCase):
         # Test with value that would cause overflow
         large_value = Value("0xffffffffffffffff", 1)
         self.assertTrue(large_value.check_value())
+        
+    def test_invalid_value_num_in_init(self):
+        """Test that invalid valueNum (<= 0) raises ValueError in initialization."""
+        with self.assertRaises(ValueError):
+            Value("0x1000", 0)
+        
+    def test_invalid_begin_index_in_init(self):
+        """Test that invalid beginIndex raises ValueError in initialization."""
+        with self.assertRaises(ValueError):
+            Value("invalid_hex", 100)
+    
+    def test_invalid_type_in_init(self):
+        """Test that invalid parameter types raise TypeError in initialization."""
+        with self.assertRaises(TypeError):
+            Value(123, 100)  # beginIndex should be string
+        
+        with self.assertRaises(TypeError):
+            Value("0x1000", "100")  # valueNum should be int
 
 
 if __name__ == '__main__':

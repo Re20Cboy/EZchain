@@ -1,5 +1,4 @@
 import copy
-import random
 import sys
 import os
 
@@ -7,7 +6,6 @@ import os
 sys.path.insert(0, os.path.dirname(__file__) + '/..')
 
 from EZ_Tool_Box.Hash import sha256_hash
-import hashlib
 
 # TODO: 默克尔树构造前的数据类型检查。
 

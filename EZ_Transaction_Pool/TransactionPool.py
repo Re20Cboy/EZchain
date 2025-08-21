@@ -2,7 +2,7 @@ import copy
 import transaction
 
 
-class txnsPool:
+class TxnPool:
     def __init__(self):
         self.pool = []  # [[(accTxn's Digest, acc's sig for hash, acc's addr, acc's ID), ...], ...]
         self.sender_id = []  # list of acc nodes' uuid

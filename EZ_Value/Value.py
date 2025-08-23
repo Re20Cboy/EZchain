@@ -1,5 +1,6 @@
 import re
 
+#TODO：值的状态：未花销、本地提交待确认、链上已确认（=已花费）
 
 class Value:  # 针对VCB区块链的专门设计的值结构，总量2^259 = 16^65
     def __init__(self, beginIndex, valueNum):  # beginIndex是16进制str，valueNum是10进制int

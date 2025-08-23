@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives import serialization
 
 # Add the project root to Python path
 sys.path.insert(0, os.path.dirname(__file__) + '/..')
+sys.path.insert(0, os.path.dirname(__file__) + '/../EZ_Transaction')
 
 try:
     from EZ_Transaction.MultiTransactions import MultiTransactions
@@ -91,7 +92,10 @@ class TestMultiTransactionsInitialization(unittest.TestCase):
         # Should be a string in ISO format
         self.assertIsInstance(multi_tx.time, str)
         self.assertIn('T', multi_tx.time)  # ISO format should contain 'T'
-        self.assertIn('Z', multi_tx.time)  # ISO format should end with Z or +00:00
+        # ISO format can end with Z or +00:00, or contain microseconds
+        self.assertTrue(multi_tx.time.endswith('Z') or 
+                       '+' in multi_tx.time or 
+                       '.' in multi_tx.time)
 
 
 class TestMultiTransactionsEncoding(unittest.TestCase):

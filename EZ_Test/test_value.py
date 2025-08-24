@@ -11,7 +11,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
-    from EZ_Value.Value import Value
+    from EZ_Value.Value import Value, ValueState
 except ImportError as e:
     print(f"Error importing Value: {e}")
     sys.exit(1)
@@ -54,6 +54,29 @@ class TestValueInitialization(unittest.TestCase):
         self.assertIn('value #begin:' + str(self.valid_begin), output)
         self.assertIn('value #end:' + str(self.value.end_index), output)
         self.assertIn('value num:' + str(self.valid_num), output)
+        self.assertIn('value state:unspent', output)
+        
+    def test_default_state(self):
+        """Test that Value objects default to UNSPENT state."""
+        value = Value("0x1000", 100)
+        self.assertTrue(value.is_unspent())
+        self.assertFalse(value.is_local_committed())
+        self.assertFalse(value.is_confirmed())
+        self.assertEqual(value.state, ValueState.UNSPENT)
+        
+    def test_custom_state(self):
+        """Test Value initialization with custom state."""
+        value = Value("0x1000", 100, ValueState.LOCAL_COMMITTED)
+        self.assertFalse(value.is_unspent())
+        self.assertTrue(value.is_local_committed())
+        self.assertFalse(value.is_confirmed())
+        self.assertEqual(value.state, ValueState.LOCAL_COMMITTED)
+        
+        value2 = Value("0x1000", 100, ValueState.CONFIRMED)
+        self.assertFalse(value2.is_unspent())
+        self.assertFalse(value2.is_local_committed())
+        self.assertTrue(value2.is_confirmed())
+        self.assertEqual(value2.state, ValueState.CONFIRMED)
 
 
 class TestValueValidation(unittest.TestCase):
@@ -284,6 +307,82 @@ class TestValueEdgeCases(unittest.TestCase):
             Value("0x1000", 100).split_value(100)
 
 
+class TestValueStateManagement(unittest.TestCase):
+    """Test suite for Value state management functionality."""
+    
+    def setUp(self):
+        """Set up test fixtures before each test method."""
+        self.value = Value("0x1000", 100)
+        
+    def test_set_state_valid(self):
+        """Test setting valid state."""
+        self.value.set_state(ValueState.LOCAL_COMMITTED)
+        self.assertTrue(self.value.is_local_committed())
+        self.assertFalse(self.value.is_unspent())
+        
+        self.value.set_state(ValueState.CONFIRMED)
+        self.assertTrue(self.value.is_confirmed())
+        self.assertFalse(self.value.is_local_committed())
+        
+        self.value.set_state(ValueState.UNSPENT)
+        self.assertTrue(self.value.is_unspent())
+        self.assertFalse(self.value.is_confirmed())
+        
+    def test_set_state_invalid(self):
+        """Test setting invalid state raises TypeError."""
+        with self.assertRaises(TypeError):
+            self.value.set_state("invalid_state")
+        with self.assertRaises(TypeError):
+            self.value.set_state(123)
+        with self.assertRaises(TypeError):
+            self.value.set_state(None)
+            
+    def test_state_methods_consistency(self):
+        """Test that state methods are consistent."""
+        # Test UNSPENT state
+        self.value.set_state(ValueState.UNSPENT)
+        self.assertTrue(self.value.is_unspent())
+        self.assertFalse(self.value.is_local_committed())
+        self.assertFalse(self.value.is_confirmed())
+        self.assertTrue(self.value.can_be_spent())
+        
+        # Test LOCAL_COMMITTED state
+        self.value.set_state(ValueState.LOCAL_COMMITTED)
+        self.assertFalse(self.value.is_unspent())
+        self.assertTrue(self.value.is_local_committed())
+        self.assertFalse(self.value.is_confirmed())
+        self.assertFalse(self.value.can_be_spent())
+        
+        # Test CONFIRMED state
+        self.value.set_state(ValueState.CONFIRMED)
+        self.assertFalse(self.value.is_unspent())
+        self.assertFalse(self.value.is_local_committed())
+        self.assertTrue(self.value.is_confirmed())
+        self.assertFalse(self.value.can_be_spent())
+        
+    def test_state_persistence_in_operations(self):
+        """Test that state persists during value operations."""
+        # Set initial state
+        self.value.set_state(ValueState.LOCAL_COMMITTED)
+        
+        # Split value and check state persistence
+        v1, v2 = self.value.split_value(50)
+        
+        # Both parts should maintain the same state
+        self.assertEqual(v1.state, ValueState.LOCAL_COMMITTED)
+        self.assertEqual(v2.state, ValueState.LOCAL_COMMITTED)
+        
+        # Test intersection operations
+        other_value = Value("0x1080", 100, ValueState.UNSPENT)
+        result = self.value.get_intersect_value(other_value)
+        
+        if result:
+            intersect_value, rest_values = result
+            self.assertEqual(intersect_value.state, ValueState.LOCAL_COMMITTED)
+            for rest_value in rest_values:
+                self.assertEqual(rest_value.state, ValueState.LOCAL_COMMITTED)
+
+
 class TestValueErrorHandling(unittest.TestCase):
     """Test suite for Value error handling."""
     
@@ -320,6 +419,9 @@ class TestValueErrorHandling(unittest.TestCase):
         
         with self.assertRaises(TypeError):
             Value("0x1000", "100")  # valueNum should be int
+            
+        with self.assertRaises(TypeError):
+            Value("0x1000", 100, "invalid_state")  # state should be ValueState
 
 
 if __name__ == '__main__':

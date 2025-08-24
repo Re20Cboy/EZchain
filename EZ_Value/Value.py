@@ -1,14 +1,21 @@
 import re
+from enum import Enum
 
-#TODO：值的状态：未花销、本地提交待确认、链上已确认（=已花费）
+class ValueState(Enum):
+    UNSPENT = "unspent"  # 未花销
+    SELECTED = "selected"  # 已选中，准备注入交易
+    LOCAL_COMMITTED = "local_committed"  # 本地提交待确认
+    CONFIRMED = "confirmed"  # 链上已确认（=已花费）
 
-class Value:  # 针对VCB区块链的专门设计的值结构，总量2^259 = 16^65
-    def __init__(self, beginIndex, valueNum):  # beginIndex是16进制str，valueNum是10进制int
+class Value:  # 针对VCB区块链的专门设计的值结构，总量2^259 = 16^65（总量暂未定）
+    def __init__(self, beginIndex, valueNum, state=ValueState.UNSPENT):  # beginIndex是16进制str，valueNum是10进制int，state是ValueState枚举
         # 输入参数验证
         if not isinstance(beginIndex, str):
             raise TypeError("beginIndex must be a string")
         if not isinstance(valueNum, int):
             raise TypeError("valueNum must be an integer")
+        if not isinstance(state, ValueState):
+            raise TypeError("state must be a ValueState enum")
         
         if valueNum <= 0:
             raise ValueError("valueNum must be positive")
@@ -19,12 +26,14 @@ class Value:  # 针对VCB区块链的专门设计的值结构，总量2^259 = 16
         # 值的开始和结束index都包含在值内
         self.begin_index = beginIndex
         self.value_num = valueNum
+        self.state = state
         self.end_index = self.get_end_index(beginIndex, valueNum)
 
     def print_value(self):
         print('value #begin:' + str(self.begin_index))
         print('value #end:' + str(self.end_index))
         print('value num:' + str(self.value_num))
+        print('value state:' + str(self.state.value))
 
     def get_decimal_begin_index(self):
         return int(self.begin_index, 16)
@@ -36,9 +45,9 @@ class Value:  # 针对VCB区块链的专门设计的值结构，总量2^259 = 16
         # 边缘值检测
         if change <= 0 or change >= self.value_num:
             raise ValueError("Invalid change value")
-        V1 = Value(self.begin_index, self.value_num - change)
+        V1 = Value(self.begin_index, self.value_num - change, self.state)
         tmpIndex = hex(V1.get_decimal_end_index() + 1)
-        V2 = Value(tmpIndex, change)
+        V2 = Value(tmpIndex, change, self.state)
         return V1, V2  # V2是找零
 
     def get_end_index(self, begin_index, value_num):
@@ -53,6 +62,29 @@ class Value:  # 针对VCB区块链的专门设计的值结构，总量2^259 = 16
         if self.value_num <= 0 or not self._is_valid_hex(self.begin_index) or not self._is_valid_hex(self.end_index):
             return False
         return self.end_index == self.get_end_index(self.begin_index, self.value_num)
+
+    def set_state(self, new_state):  # 设置值的状态
+        if not isinstance(new_state, ValueState):
+            raise TypeError("new_state must be a ValueState enum")
+        self.state = new_state
+
+    def is_unspent(self):  # 检查值是否为未花销状态
+        return self.state == ValueState.UNSPENT
+    
+    def is_selected(self):  # 检查值是否为被选中状态
+        return self.state == ValueState.SELECTED
+
+    def is_local_committed(self):  # 检查值是否为本地提交待确认状态
+        return self.state == ValueState.LOCAL_COMMITTED
+
+    def is_confirmed(self):  # 检查值是否为链上已确认状态
+        return self.state == ValueState.CONFIRMED
+
+    def can_be_select(self):  # 检查值是否为链上已确认状态
+        return self.is_unspent() and not self.is_selected()
+
+    '''def can_be_spent(self):  # 检查值是否可以被花费（只有未花销状态可以）
+        return self.is_unspent()'''
 
     def get_intersect_value(self, target):  # target是Value类型, 获取和target有交集的值的部分
         decimal_begin = self.get_decimal_begin_index()

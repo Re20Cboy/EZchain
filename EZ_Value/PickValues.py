@@ -1,3 +1,5 @@
+from typing import List, Tuple, Optional
+
 import sys
 import os
 
@@ -5,13 +7,18 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from EZ_Transaction.SingleTransaction import Transaction
-
-#TODO: 值选择模块应提供多种选择算法插件（e.g., 贪心选择）。
-
-
+from EZ_Value.Value import Value
 
 class PickValues:
-    def pick_values_and_generate_txns(self, tx_num, tx_sender, tx_recipient, tx_nonce, tx_hash, tx_time):
+    """
+    A class for picking values from available UTXOs and generating transactions.
+    
+    This class implements the greedy algorithm for selecting UTXOs to meet
+    a specific transaction amount, with support for change handling.
+    """
+    
+    def pick_values_and_generate_txns(v_lst: [List[Value]], tx_num: int, tx_sender: str, tx_recipient: str, 
+                                      tx_nonce: int, tx_hash: str, tx_time: int) -> Tuple[List[int], int, Optional[Transaction], Optional[Transaction]]:
         """Pick values and generate transactions for the specified amount.
         
         Args:
@@ -24,6 +31,10 @@ class PickValues:
 
         Returns:
             tuple: (costList, changeValueIndex, txn_2_sender, txn_2_recipient)
+                - costList: List of indices of selected ValuePrfBlockPairs
+                - changeValueIndex: Index of the value that was split for change, or -1
+                - txn_2_sender: Transaction for the change amount
+                - txn_2_recipient: Transaction for the main amount
             
         Raises:
             ValueError: If tx_num is less than 1 or balance is insufficient
@@ -31,65 +42,68 @@ class PickValues:
         if tx_num < 1:
             raise ValueError("The value of tx_num cannot be less than 1")
 
-        tmp_cost = 0
-        cost_list = []
+        total_selected = 0
+        selected_indices = []
         change_value_index = -1
-        txn_2_sender = None
-        txn_2_recipient = None
-        value_enough = False
+        change_transaction = None
+        main_transaction = None
         
-        for i, vpb_pair in enumerate(self.ValuePrfBlockPair):
-            value = vpb_pair[0]
-
-            # check the value is costed (unconfirmed and confirmed)
-            if value in self.unconfirmed_value_list:
+        # Iterate through available values to select enough for the transaction
+        for index, value in enumerate(v_lst):
+            # Skip values that are unconfirmed
+            if value.can_be_select() is False:
                 continue
 
-            # check the values whether have been select in pre round txn
+            # Skip values already selected in previous rounds
             if value in [cost_value[0] for cost_value in self.costedValuesAndRecipes]:
                 continue
                 
-            tmp_cost += value.valueNum
-            cost_list.append(i)
+            total_selected += value.valueNum
+            selected_indices.append(index)
             
-            if tmp_cost >= tx_num:
-                change_value_index = i
-                value_enough = True
+            # Check if we've selected enough value
+            if total_selected >= tx_num:
+                change_value_index = index
                 break
                 
-        if not value_enough:
+        # Check if we have enough balance
+        if total_selected < tx_num:
             raise ValueError("Insufficient balance!")
             
-        change = tmp_cost - tx_num
+        change_amount = total_selected - tx_num
         
-        if change > 0:
-            value_obj = self.ValuePrfBlockPair[change_value_index][0]
-            V1, V2 = value_obj.split_value(change)
+        # If there's change, split the last selected value and create transactions
+        if change_amount > 0:
+            change_value_obj = self.ValuePrfBlockPair[change_value_index][0]
+            main_value, change_value = change_value_obj.split_value(change_amount)
             
-            txn_2_sender = Transaction(
+            # Create transaction for the change amount
+            change_transaction = Transaction(
                 sender=tx_sender,
                 recipient=tx_recipient,
                 nonce=tx_nonce,
                 signature=None,
-                value=[V2],
+                value=[change_value],
                 tx_hash=tx_hash,
                 time=tx_time
             )
-            txn_2_sender.sig_txn(self.privateKey)
+            change_transaction.sig_txn(self.privateKey)
             
-            txn_2_recipient = Transaction(
+            # Create transaction for the main amount
+            main_transaction = Transaction(
                 sender=tx_sender,
                 recipient=tx_recipient,
                 nonce=tx_nonce,
                 signature=None,
-                value=[V1],
+                value=[main_value],
                 tx_hash=tx_hash,
                 time=tx_time
             )
-            txn_2_recipient.sig_txn(self.privateKey)
+            main_transaction.sig_txn(self.privateKey)
 
-            self.costedValuesAndRecipes.append((V1, tx_recipient))
+            # Record the main value as used
+            self.costedValuesAndRecipes.append((main_value, tx_recipient))
         else:
             change_value_index = -1
             
-        return cost_list, change_value_index, txn_2_sender, txn_2_recipient
+        return selected_indices, change_value_index, change_transaction, main_transaction

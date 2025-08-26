@@ -15,7 +15,7 @@ import os
 sys.path.insert(0, os.path.dirname(__file__) + '/..')
 
 from EZ_Tool_Box.Hash import sha256_hash
-from SingleTransaction import Transaction
+from .SingleTransaction import Transaction
 
 class MultiTransactions:
     """Multi-transaction class for handling multiple transactions as a single unit."""

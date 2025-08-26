@@ -172,8 +172,9 @@ class AccountPickValues:
     
     def cleanup_confirmed_values(self) -> int:
         """清除已确认的Value"""
-        return len(self.account_collection._state_index[ValueState.CONFIRMED])
+        count = len(self.account_collection._state_index[ValueState.CONFIRMED])
         self.account_collection.clear_spent_values()
+        return count
     
     def validate_account_integrity(self) -> bool:
         """验证账户完整性"""

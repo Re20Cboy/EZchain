@@ -3,7 +3,7 @@
 Unit tests for Merkle Tree module.
 """
 
-import unittest
+import pytest
 import sys
 import os
 
@@ -18,41 +18,47 @@ except ImportError as e:
     sys.exit(1)
 
 
-class TestMerkleTreeNode(unittest.TestCase):
+@pytest.fixture
+def merkle_node_data():
+    """Fixture for merkle node tests."""
+    content = "test_content"
+    value = "test_hash_value"
+    left_node = MerkleTreeNode(None, None, "left_hash", "left_content")
+    right_node = MerkleTreeNode(None, None, "right_hash", "right_content")
+    return content, value, left_node, right_node
+
+
+class TestMerkleTreeNode:
     """Test suite for Merkle Tree Node implementation."""
-    
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.content = "test_content"
-        self.value = "test_hash_value"
-        self.left_node = MerkleTreeNode(None, None, "left_hash", "left_content")
-        self.right_node = MerkleTreeNode(None, None, "right_hash", "right_content")
         
-    def test_node_initialization(self):
+    def test_node_initialization(self, merkle_node_data):
         """Test MerkleTreeNode initialization."""
-        node = MerkleTreeNode(self.left_node, self.right_node, self.value, self.content)
+        content, value, left_node, right_node = merkle_node_data
+        node = MerkleTreeNode(left_node, right_node, value, content)
 
-        self.assertEqual(node.left, self.left_node)
-        self.assertEqual(node.right, self.right_node)
-        self.assertEqual(node.value, self.value)
-        self.assertEqual(node.content, self.content)
-        self.assertEqual(node.path, [])
-        self.assertIsNone(node.leaf_index)
-        self.assertIsNone(node.father)
+        assert node.left == left_node
+        assert node.right == right_node
+        assert node.value == value
+        assert node.content == content
+        assert node.path == []
+        assert node.leaf_index is None
+        assert node.father is None
         
-    def test_node_with_leaf_index(self):
+    def test_node_with_leaf_index(self, merkle_node_data):
         """Test node initialization with leaf index."""
+        content, value, left_node, right_node = merkle_node_data
         leaf_index = 5
-        node = MerkleTreeNode(None, None, self.value, self.content, leaf_index=leaf_index)
+        node = MerkleTreeNode(None, None, value, content, leaf_index=leaf_index)
 
-        self.assertEqual(node.leaf_index, leaf_index)
+        assert node.leaf_index == leaf_index
         
-    def test_node_with_path(self):
+    def test_node_with_path(self, merkle_node_data):
         """Test node initialization with path."""
+        content, value, left_node, right_node = merkle_node_data
         path = [1, 2, 3]
-        node = MerkleTreeNode(None, None, self.value, self.content, path=path)
+        node = MerkleTreeNode(None, None, value, content, path=path)
 
-        self.assertEqual(node.path, path)
+        assert node.path == path
         
     def test_node_hash_method(self):
         """Test static hash method."""
@@ -60,92 +66,104 @@ class TestMerkleTreeNode(unittest.TestCase):
         expected_hash = sha256_hash(test_value)
 
         # Hash should be a string
-        self.assertIsInstance(expected_hash, str)
+        assert isinstance(expected_hash, str)
         
         # Hash should be consistent (same input = same output)
         hash1 = sha256_hash(test_value)
         hash2 = sha256_hash(test_value)
-        self.assertEqual(hash1, hash2)
+        assert hash1 == hash2
         
         # Different inputs should have different hashes
         hash3 = sha256_hash("different_string")
-        self.assertNotEqual(hash1, hash3)
+        assert hash1 != hash3
         
-    def test_node_string_representation(self):
+    def test_node_string_representation(self, merkle_node_data):
         """Test node string representation."""
-        node = MerkleTreeNode(None, None, self.value, self.content)
+        content, value, left_node, right_node = merkle_node_data
+        node = MerkleTreeNode(None, None, value, content)
         str_repr = str(node)
         
-        self.assertEqual(str_repr, self.value)
+        assert str_repr == value
         
     
 
-class TestMerkleTree(unittest.TestCase):
+@pytest.fixture
+def merkle_tree_data():
+    """Fixture for merkle tree tests."""
+    test_data = ["data1", "data2", "data3", "data4"]
+    empty_data = []
+    single_data = ["single_item"]
+    odd_data = ["data1", "data2", "data3"]
+    return test_data, empty_data, single_data, odd_data
+
+
+class TestMerkleTree:
     """Test suite for Merkle Tree implementation."""
-    
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.test_data = ["data1", "data2", "data3", "data4"]
-        self.empty_data = []
-        self.single_data = ["single_item"]
-        self.odd_data = ["data1", "data2", "data3"]
         
-    def test_tree_initialization(self):
+    def test_tree_initialization(self, merkle_tree_data):
         """Test MerkleTree initialization."""
-        tree = MerkleTree(self.test_data)
+        test_data, empty_data, single_data, odd_data = merkle_tree_data
+        tree = MerkleTree(test_data)
 
-        self.assertEqual(len(tree.leaves), len(self.test_data))
-        self.assertIsNotNone(tree.root)
-        self.assertIsNotNone(tree.prf_list)
+        assert len(tree.leaves) == len(test_data)
+        assert tree.root is not None
+        assert tree.prf_list is not None
         
-    def test_tree_genesis_block_initialization(self):
+    def test_tree_genesis_block_initialization(self, merkle_tree_data):
         """Test genesis block tree initialization."""
-        tree = MerkleTree(self.single_data, is_genesis_block=True)
+        test_data, empty_data, single_data, odd_data = merkle_tree_data
+        tree = MerkleTree(single_data, is_genesis_block=True)
 
-        self.assertEqual(len(tree.leaves), 1)
-        self.assertEqual(tree.root.value, tree.leaves[0].value)
-        self.assertEqual(tree.root, tree.leaves[0])
+        assert len(tree.leaves) == 1
+        assert tree.root.value == tree.leaves[0].value
+        assert tree.root == tree.leaves[0]
         
-    def test_tree_empty_data(self):
+    def test_tree_empty_data(self, merkle_tree_data):
         """Test tree initialization with empty data."""
+        test_data, empty_data, single_data, odd_data = merkle_tree_data
         # This should handle empty data gracefully
-        tree = MerkleTree(self.empty_data)
-        self.assertEqual(len(tree.leaves), 0)
+        tree = MerkleTree(empty_data)
+        assert len(tree.leaves) == 0
         
-    def test_tree_single_item(self):
+    def test_tree_single_item(self, merkle_tree_data):
         """Test tree with single item (non-genesis)."""
-        tree = MerkleTree(self.single_data)
+        test_data, empty_data, single_data, odd_data = merkle_tree_data
+        tree = MerkleTree(single_data)
         
-        self.assertEqual(len(tree.leaves), 1)
-        self.assertIsNotNone(tree.root)
+        assert len(tree.leaves) == 1
+        assert tree.root is not None
         
-    def test_tree_root_hash(self):
+    def test_tree_root_hash(self, merkle_tree_data):
         """Test get_root_hash method."""
-        tree = MerkleTree(self.test_data)
+        test_data, empty_data, single_data, odd_data = merkle_tree_data
+        tree = MerkleTree(test_data)
         root_hash = tree.get_root_hash()
         
-        self.assertIsInstance(root_hash, str)
-        self.assertEqual(root_hash, tree.root.value)
+        assert isinstance(root_hash, str)
+        assert root_hash == tree.root.value
         
         # Test with different data should produce different root hash
         tree2 = MerkleTree(["different_data"])
-        self.assertNotEqual(root_hash, tree2.get_root_hash())
+        assert root_hash != tree2.get_root_hash()
         
-    def test_tree_validation(self):
+    def test_tree_validation(self, merkle_tree_data):
         """Test tree validation method."""
-        tree = MerkleTree(self.test_data)
+        test_data, empty_data, single_data, odd_data = merkle_tree_data
+        tree = MerkleTree(test_data)
 
         # Valid tree should return True
-        self.assertTrue(tree.check_tree())
+        assert tree.check_tree()
         
-    def test_tree_single_leaf_validation(self):
+    def test_tree_single_leaf_validation(self, merkle_tree_data):
         """Test validation with single leaf."""
-        tree = MerkleTree(self.single_data)
-        self.assertTrue(tree.check_tree())
+        test_data, empty_data, single_data, odd_data = merkle_tree_data
+        tree = MerkleTree(single_data)
+        assert tree.check_tree()
         
-    def test_tree_validation_with_modified_data(self):
+    def test_tree_validation_with_modified_data(self, merkle_tree_data):
         """Test tree validation with corrupted data."""
-        tree = MerkleTree(self.test_data)
+        test_data, empty_data, single_data, odd_data = merkle_tree_data
+        tree = MerkleTree(test_data)
         
         # Corrupt a leaf node's content and hash
         original_hash = tree.leaves[0].value
@@ -153,37 +171,40 @@ class TestMerkleTree(unittest.TestCase):
         tree.leaves[0].value = "corrupted_hash"
         
         # Tree should fail validation
-        self.assertFalse(tree.check_tree())
+        assert not tree.check_tree()
         
         # Restore original content
-        tree.leaves[0].content = self.test_data[0]
+        tree.leaves[0].content = test_data[0]
         tree.leaves[0].value = original_hash
         
         # Tree should pass validation again
-        self.assertTrue(tree.check_tree())
+        assert tree.check_tree()
         
-    def test_tree_leaves_properties(self):
+    def test_tree_leaves_properties(self, merkle_tree_data):
         """Test leaves properties and indexing."""
-        tree = MerkleTree(self.test_data)
+        test_data, empty_data, single_data, odd_data = merkle_tree_data
+        tree = MerkleTree(test_data)
 
         # Check that leaves are properly indexed
         for i, leaf in enumerate(tree.leaves):
-            self.assertEqual(leaf.leaf_index, i)
-            self.assertEqual(leaf.content, self.test_data[i])
+            assert leaf.leaf_index == i
+            assert leaf.content == test_data[i]
             
-    def test_tree_prf_list_generation(self):
+    def test_tree_prf_list_generation(self, merkle_tree_data):
         """Test proof list generation."""
-        tree = MerkleTree(self.test_data)
+        test_data, empty_data, single_data, odd_data = merkle_tree_data
+        tree = MerkleTree(test_data)
 
-        self.assertIsNotNone(tree.prf_list)
-        self.assertEqual(len(tree.prf_list), len(self.test_data))
+        assert tree.prf_list is not None
+        assert len(tree.prf_list) == len(test_data)
         
         # Each proof should be a list
         for proof in tree.prf_list:
-            self.assertIsInstance(proof, list)
+            assert isinstance(proof, list)
             
-    def test_tree_different_data_sizes(self):
+    def test_tree_different_data_sizes(self, merkle_tree_data):
         """Test tree with different data sizes."""
+        test_data, empty_data, single_data, odd_data = merkle_tree_data
         test_cases = [
             ["item1"],  # Single item
             ["item1", "item2"],  # Even number
@@ -192,9 +213,8 @@ class TestMerkleTree(unittest.TestCase):
         ]
         
         for data in test_cases:
-            with self.subTest(data=data):
-                tree = MerkleTree(data)
-                self.assertTrue(tree.check_tree())
+            tree = MerkleTree(data)
+            assert tree.check_tree()
                 
     def test_tree_duplicate_data(self):
         """Test tree with duplicate data items."""
@@ -202,39 +222,42 @@ class TestMerkleTree(unittest.TestCase):
         tree = MerkleTree(duplicate_data)
 
         # Tree should still be valid
-        self.assertTrue(tree.check_tree())
+        assert tree.check_tree()
         
         # But different positions should have different paths/indexes
         for i, leaf in enumerate(tree.leaves):
-            self.assertEqual(leaf.leaf_index, i)
+            assert leaf.leaf_index == i
             
-    def test_tree_hash_consistency(self):
+    def test_tree_hash_consistency(self, merkle_tree_data):
         """Test hash consistency across multiple tree creations."""
-        tree1 = MerkleTree(self.test_data)
-        tree2 = MerkleTree(self.test_data)
+        test_data, empty_data, single_data, odd_data = merkle_tree_data
+        tree1 = MerkleTree(test_data)
+        tree2 = MerkleTree(test_data)
 
         # Same data should produce same root hash
-        self.assertEqual(tree1.get_root_hash(), tree2.get_root_hash())
+        assert tree1.get_root_hash() == tree2.get_root_hash()
         
         # Leaves should have same hashes in same positions
         for i in range(len(tree1.leaves)):
-            self.assertEqual(tree1.leaves[i].value, tree2.leaves[i].value)
+            assert tree1.leaves[i].value == tree2.leaves[i].value
             
-    def test_tree_path_generation(self):
+    def test_tree_path_generation(self, merkle_tree_data):
         """Test path generation in leaves."""
-        tree = MerkleTree(self.test_data)
+        test_data, empty_data, single_data, odd_data = merkle_tree_data
+        tree = MerkleTree(test_data)
 
         # All leaves should have paths
         for leaf in tree.leaves:
-            self.assertIsInstance(leaf.path, list)
+            assert isinstance(leaf.path, list)
             
-    def test_tree_large_dataset(self):
+    def test_tree_large_dataset(self, merkle_tree_data):
         """Test tree with larger dataset."""
+        test_data, empty_data, single_data, odd_data = merkle_tree_data
         large_data = [f"item_{i}" for i in range(100)]
         tree = MerkleTree(large_data)
 
-        self.assertTrue(tree.check_tree())
-        self.assertEqual(len(tree.leaves), 100)
+        assert tree.check_tree()
+        assert len(tree.leaves) == 100
         
     def test_tree_string_data(self):
         """Test tree with various string data."""
@@ -247,7 +270,7 @@ class TestMerkleTree(unittest.TestCase):
         ]
 
         tree = MerkleTree(string_data)
-        self.assertTrue(tree.check_tree())
+        assert tree.check_tree()
         
     def test_node_father_relationship(self):
         """Test father-child relationship setup in Merkle Tree."""
@@ -256,7 +279,7 @@ class TestMerkleTree(unittest.TestCase):
 
         # Test that all leaf nodes have their father set
         for leaf in tree.leaves:
-            self.assertIsNotNone(leaf.father, f"Leaf node {leaf.leaf_index} should have a father")
+            assert leaf.father is not None, f"Leaf node {leaf.leaf_index} should have a father"
             
         # Test that internal nodes have their father set (except root)
         internal_nodes = []
@@ -270,10 +293,10 @@ class TestMerkleTree(unittest.TestCase):
         collect_internal_nodes(tree.root)
         
         for node in internal_nodes:
-            self.assertIsNotNone(node.father, f"Internal node should have a father")
+            assert node.father is not None, f"Internal node should have a father"
             
         # Test that root has no father
-        self.assertIsNone(tree.root.father, "Root node should not have a father")
+        assert tree.root.father is None, "Root node should not have a father"
         
         # Test specific parent-child relationships
         # For a tree with 4 leaves: [0,1,2,3]
@@ -282,38 +305,30 @@ class TestMerkleTree(unittest.TestCase):
         
         # Find parent of leaf 0
         leaf0_parent = tree.leaves[0].father
-        self.assertEqual(leaf0_parent.left, tree.leaves[0])
-        self.assertEqual(leaf0_parent.right, tree.leaves[1])
+        assert leaf0_parent.left == tree.leaves[0]
+        assert leaf0_parent.right == tree.leaves[1]
         
         # Find parent of leaf 2
         leaf2_parent = tree.leaves[2].father
-        self.assertEqual(leaf2_parent.left, tree.leaves[2])
-        self.assertEqual(leaf2_parent.right, tree.leaves[3])
+        assert leaf2_parent.left == tree.leaves[2]
+        assert leaf2_parent.right == tree.leaves[3]
         
         # Root should be the parent of the two parent nodes
-        self.assertEqual(tree.root, leaf0_parent.father)
-        self.assertEqual(tree.root, leaf2_parent.father)
+        assert tree.root == leaf0_parent.father
+        assert tree.root == leaf2_parent.father
         
 
-class TestMerkleTreeEdgeCases(unittest.TestCase):
+class TestMerkleTreeEdgeCases:
     """Test suite for Merkle Tree edge cases."""
-    
-    """def test_tree_none_data(self):
-        tree = merkle_tree([None, None, None])
-        self.assertTrue(tree.check_tree())"""
         
     def test_tree_unicode_data(self):
         """Test tree with unicode data."""
         unicode_data = ["你好", "世界", "🌍", "🚀"]
         tree = MerkleTree(unicode_data)
-        self.assertTrue(tree.check_tree())
+        assert tree.check_tree()
         
     def test_tree_extremely_large_data(self):
         """Test tree with very large data."""
         large_data = ["a" * 10000 for _ in range(10)]
         tree = MerkleTree(large_data)
-        self.assertTrue(tree.check_tree())
-
-
-if __name__ == '__main__':
-    unittest.main(verbosity=2)
+        assert tree.check_tree()

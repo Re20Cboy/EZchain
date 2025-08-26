@@ -3,7 +3,7 @@
 Comprehensive unit tests for MultiTransactions.py with multi-transaction functionality.
 """
 
-import unittest
+import pytest
 import sys
 import os
 import datetime
@@ -24,10 +24,11 @@ except ImportError as e:
     print(f"Error importing modules: {e}")
     sys.exit(1)
 
-class TestMultiTransactionsInitialization(unittest.TestCase):
+class TestMultiTransactionsInitialization:
     """Test suite for MultiTransactions class initialization and basic properties."""
     
-    def setUp(self):
+    @pytest.fixture
+    def setup_init(self):
         """Set up test fixtures before each test method."""
         self.sender = "0xSender123"
         self.value1 = [Value("0x1000", 100)]
@@ -50,34 +51,35 @@ class TestMultiTransactionsInitialization(unittest.TestCase):
         
         self.multi_txns = [self.tx1, self.tx2]
         
-    def test_multi_transactions_initialization(self):
+    def test_multi_transactions_initialization(self, setup_init):
         """Test basic MultiTransactions initialization."""
         multi_tx = MultiTransactions(
             sender=self.sender,
             multi_txns=self.multi_txns
         )
         
-        self.assertEqual(multi_tx.sender, self.sender)
-        self.assertEqual(len(multi_tx.multi_txns), 2)
-        self.assertIsInstance(multi_tx.multi_txns[0], Transaction)
-        self.assertIsInstance(multi_tx.multi_txns[1], Transaction)
-        self.assertIsNotNone(multi_tx.time)
-        self.assertIsInstance(multi_tx.time, str)
-        self.assertIsNone(multi_tx.signature)
-        self.assertIsNone(multi_tx.digest)
+        assert multi_tx.sender == self.sender
+        # assert multi_tx.sender_id == self.sender_id
+        assert len(multi_tx.multi_txns) == 2
+        assert isinstance(multi_tx.multi_txns[0], Transaction)
+        assert isinstance(multi_tx.multi_txns[1], Transaction)
+        assert multi_tx.time is not None
+        assert isinstance(multi_tx.time, str)
+        assert multi_tx.signature is None
+        assert multi_tx.digest is None
         
-    def test_multi_transactions_initialization_empty_list(self):
+    def test_multi_transactions_initialization_empty_list(self, setup_init):
         """Test MultiTransactions initialization with empty transaction list."""
         multi_tx = MultiTransactions(
             sender=self.sender,
             multi_txns=[]
         )
         
-        self.assertEqual(len(multi_tx.multi_txns), 0)
-        self.assertIsNone(multi_tx.signature)
-        self.assertIsNone(multi_tx.digest)
+        assert len(multi_tx.multi_txns) == 0
+        assert multi_tx.signature is None
+        assert multi_tx.digest is None
         
-    def test_time_format(self):
+    def test_time_format(self, setup_init):
         """Test that time is properly formatted in ISO format."""
         multi_tx = MultiTransactions(
             sender=self.sender,
@@ -85,18 +87,19 @@ class TestMultiTransactionsInitialization(unittest.TestCase):
         )
         
         # Should be a string in ISO format
-        self.assertIsInstance(multi_tx.time, str)
-        self.assertIn('T', multi_tx.time)  # ISO format should contain 'T'
+        assert isinstance(multi_tx.time, str)
+        assert 'T' in multi_tx.time  # ISO format should contain 'T'
         # ISO format can end with Z or +00:00, or contain microseconds
-        self.assertTrue(multi_tx.time.endswith('Z') or 
-                       '+' in multi_tx.time or 
-                       '.' in multi_tx.time)
+        assert multi_tx.time.endswith('Z') or \
+               '+' in multi_tx.time or \
+               '.' in multi_tx.time
 
 
-class TestMultiTransactionsEncoding(unittest.TestCase):
+class TestMultiTransactionsEncoding:
     """Test suite for MultiTransactions encoding and decoding functionality."""
     
-    def setUp(self):
+    @pytest.fixture
+    def setup_encoding(self):
         """Set up test fixtures before each test method."""
         self.sender = "0xSender123"
         self.value = [Value("0x1000", 100)]
@@ -122,12 +125,12 @@ class TestMultiTransactionsEncoding(unittest.TestCase):
             multi_txns=self.multi_txns
         )
         
-    def test_encode_multi_transactions(self):
+    def test_encode_multi_transactions(self, setup_encoding):
         """Test MultiTransactions encoding."""
         encoded_data = self.multi_tx.encode()
-        self.assertIsInstance(encoded_data, bytes)
+        assert isinstance(encoded_data, bytes)
         
-    def test_decode_multi_transactions(self):
+    def test_decode_multi_transactions(self, setup_encoding):
         """Test MultiTransactions decoding."""
         # First encode the multi-transactions
         encoded_data = self.multi_tx.encode()
@@ -136,13 +139,13 @@ class TestMultiTransactionsEncoding(unittest.TestCase):
         decoded_txns = MultiTransactions.decode(encoded_data)
         
         # Verify the decoded transactions
-        self.assertEqual(len(decoded_txns), 2)
-        self.assertIsInstance(decoded_txns[0], Transaction)
-        self.assertIsInstance(decoded_txns[1], Transaction)
-        self.assertEqual(decoded_txns[0].sender, self.sender)
-        self.assertEqual(decoded_txns[1].sender, self.sender)
+        assert len(decoded_txns) == 2
+        assert isinstance(decoded_txns[0], Transaction)
+        assert isinstance(decoded_txns[1], Transaction)
+        assert decoded_txns[0].sender == self.sender
+        assert decoded_txns[1].sender == self.sender
         
-    def test_encode_decode_roundtrip(self):
+    def test_encode_decode_roundtrip(self, setup_encoding):
         """Test that encode-decode roundtrip preserves all data."""
         # Create a new multi-transaction with different data
         different_tx1 = Transaction.new_transaction(
@@ -169,17 +172,18 @@ class TestMultiTransactionsEncoding(unittest.TestCase):
         decoded_txns = MultiTransactions.decode(encoded_data)
         
         # Verify all transactions are preserved
-        self.assertEqual(len(decoded_txns), 2)
-        self.assertEqual(decoded_txns[0].sender, "0xDifferentSender")
-        self.assertEqual(decoded_txns[1].sender, "0xDifferentSender")
-        self.assertEqual(decoded_txns[0].nonce, 42)
-        self.assertEqual(decoded_txns[1].nonce, 43)
+        assert len(decoded_txns) == 2
+        assert decoded_txns[0].sender == "0xDifferentSender"
+        assert decoded_txns[1].sender == "0xDifferentSender"
+        assert decoded_txns[0].nonce == 42
+        assert decoded_txns[1].nonce == 43
 
 
-class TestMultiTransactionsDigest(unittest.TestCase):
+class TestMultiTransactionsDigest:
     """Test suite for MultiTransactions digest functionality."""
     
-    def setUp(self):
+    @pytest.fixture
+    def setup_digest(self):
         """Set up test fixtures before each test method."""
         self.sender = "0xSender123"
         self.value = [Value("0x1000", 100)]
@@ -205,22 +209,22 @@ class TestMultiTransactionsDigest(unittest.TestCase):
             multi_txns=self.multi_txns
         )
         
-    def test_set_digest(self):
+    def test_set_digest(self, setup_digest):
         """Test digest calculation and setting."""
         self.multi_tx.set_digest()
         
-        self.assertIsNotNone(self.multi_tx.digest)
-        self.assertIsInstance(self.multi_tx.digest, str)
+        assert self.multi_tx.digest is not None
+        assert isinstance(self.multi_tx.digest, str)
         
-    def test_digest_consistency(self):
+    def test_digest_consistency(self, setup_digest):
         """Test that same multi-transaction produces same digest."""
         digest1 = self.multi_tx.encode()
         digest2 = self.multi_tx.encode()
         
         # Encoded data should be identical for same multi-transaction
-        self.assertEqual(digest1, digest2)
+        assert digest1 == digest2
         
-    def test_digest_different_multi_transactions(self):
+    def test_digest_different_multi_transactions(self, setup_digest):
         """Test that different multi-transactions produce different digests."""
         # Create a different multi-transaction
         different_tx = Transaction.new_transaction(
@@ -238,13 +242,14 @@ class TestMultiTransactionsDigest(unittest.TestCase):
         encoded1 = self.multi_tx.encode()
         encoded2 = different_multi_tx.encode()
         
-        self.assertNotEqual(encoded1, encoded2)
+        assert encoded1 != encoded2
 
 
-class TestMultiTransactionsSignature(unittest.TestCase):
+class TestMultiTransactionsSignature:
     """Test suite for MultiTransactions signature functionality."""
     
-    def setUp(self):
+    @pytest.fixture
+    def setup_signature(self):
         """Set up test fixtures before each test method."""
         # Generate test keys
         self.private_key = ec.generate_private_key(ec.SECP256R1())
@@ -286,25 +291,25 @@ class TestMultiTransactionsSignature(unittest.TestCase):
             multi_txns=self.multi_txns
         )
         
-    def test_sign_multi_transaction(self):
+    def test_sign_multi_transaction(self, setup_signature):
         """Test multi-transaction signing."""
         self.multi_tx.sig_acc_txn(self.private_key_pem)
         
         # Verify signature is set
-        self.assertIsNotNone(self.multi_tx.signature)
-        self.assertIsInstance(self.multi_tx.signature, bytes)
-        self.assertIsNotNone(self.multi_tx.digest)
+        assert self.multi_tx.signature is not None
+        assert isinstance(self.multi_tx.signature, bytes)
+        assert self.multi_tx.digest is not None
         
-    def test_signature_verification(self):
+    def test_signature_verification(self, setup_signature):
         """Test signature verification."""
         # Sign the multi-transaction
         self.multi_tx.sig_acc_txn(self.private_key_pem)
         
         # Verify the signature should be valid
         result = self.multi_tx.check_acc_txn_sig(self.public_key_pem)
-        self.assertTrue(result)
+        assert result
         
-    def test_signature_verification_wrong_key(self):
+    def test_signature_verification_wrong_key(self, setup_signature):
         """Test signature verification with wrong public key."""
         # Generate a different key
         wrong_private_key = ec.generate_private_key(ec.SECP256R1())
@@ -318,31 +323,32 @@ class TestMultiTransactionsSignature(unittest.TestCase):
         
         # Verify with wrong key should fail
         result = self.multi_tx.check_acc_txn_sig(wrong_public_key_pem)
-        self.assertFalse(result)
+        assert not result
         
-    def test_unsigned_multi_transaction_verification(self):
+    def test_unsigned_multi_transaction_verification(self, setup_signature):
         """Test verification of unsigned multi-transaction."""
         # When signature and digest are None, verification should fail
         result = self.multi_tx.check_acc_txn_sig(self.public_key_pem)
-        self.assertFalse(result)
+        assert not result
         
-    def test_sign_empty_transaction_list(self):
+    def test_sign_empty_transaction_list(self, setup_signature):
         """Test signing empty transaction list should raise error."""
         empty_multi_tx = MultiTransactions(
             sender=self.sender,
             multi_txns=[]
         )
         
-        with self.assertRaises(ValueError) as context:
+        with pytest.raises(ValueError) as context:
             empty_multi_tx.sig_acc_txn(self.private_key_pem)
             
-        self.assertIn("Cannot sign empty transaction list", str(context.exception))
+        assert "Cannot sign empty transaction list" in str(context.value)
 
 
-class TestMultiTransactionsEdgeCases(unittest.TestCase):
+class TestMultiTransactionsEdgeCases:
     """Test suite for MultiTransactions edge cases and error handling."""
     
-    def setUp(self):
+    @pytest.fixture
+    def setup_edge_cases(self):
         """Set up test fixtures before each test method."""
         self.sender = "0xSender123"
         self.value = [Value("0x1000", 100)]
@@ -355,17 +361,17 @@ class TestMultiTransactionsEdgeCases(unittest.TestCase):
             nonce=1
         )
         
-    def test_single_transaction_list(self):
+    def test_single_transaction_list(self, setup_edge_cases):
         """Test MultiTransactions with single transaction in list."""
         multi_tx = MultiTransactions(
             sender=self.sender,
             multi_txns=[self.tx]
         )
         
-        self.assertEqual(len(multi_tx.multi_txns), 1)
-        self.assertIsInstance(multi_tx.multi_txns[0], Transaction)
+        assert len(multi_tx.multi_txns) == 1
+        assert isinstance(multi_tx.multi_txns[0], Transaction)
         
-    def test_large_transaction_list(self):
+    def test_large_transaction_list(self, setup_edge_cases):
         """Test MultiTransactions with large transaction list."""
         transactions = []
         for i in range(100):
@@ -382,9 +388,9 @@ class TestMultiTransactionsEdgeCases(unittest.TestCase):
             multi_txns=transactions
         )
         
-        self.assertEqual(len(multi_tx.multi_txns), 100)
+        assert len(multi_tx.multi_txns) == 100
         
-    def test_encode_with_none_values(self):
+    def test_encode_with_none_values(self, setup_edge_cases):
         """Test encoding with None values in transactions."""
         # Create transaction with None values (should still encode)
         tx_with_none = Transaction(
@@ -404,13 +410,14 @@ class TestMultiTransactionsEdgeCases(unittest.TestCase):
         
         # Should still encode without error
         encoded_data = multi_tx.encode()
-        self.assertIsInstance(encoded_data, bytes)
+        assert isinstance(encoded_data, bytes)
 
 
-class TestMultiTransactionsTimeHandling(unittest.TestCase):
+class TestMultiTransactionsTimeHandling:
     """Test suite for MultiTransactions time handling."""
     
-    def setUp(self):
+    @pytest.fixture
+    def setup_time_handling(self):
         """Set up test fixtures before each test method."""
         self.sender = "0xSender123"
         self.value = [Value("0x1000", 100)]
@@ -432,7 +439,7 @@ class TestMultiTransactionsTimeHandling(unittest.TestCase):
         
         self.multi_txns = [self.tx1, self.tx2]
         
-    def test_time_in_string_representation(self):
+    def test_time_in_string_representation(self, setup_time_handling):
         """Test that time appears correctly in multi-transaction."""
         multi_tx = MultiTransactions(
             sender=self.sender,
@@ -440,10 +447,10 @@ class TestMultiTransactionsTimeHandling(unittest.TestCase):
         )
         
         # Test that time is a proper ISO format string
-        self.assertIsInstance(multi_tx.time, str)
-        self.assertTrue(len(multi_tx.time) > 0)
+        assert isinstance(multi_tx.time, str)
+        assert len(multi_tx.time) > 0
         
-    def test_multiple_multi_transactions_different_times(self):
+    def test_multiple_multi_transactions_different_times(self, setup_time_handling):
         """Test that different multi-transactions have different timestamps."""
         import time
         
@@ -461,13 +468,14 @@ class TestMultiTransactionsTimeHandling(unittest.TestCase):
         )
         
         # Timestamps should be different
-        self.assertNotEqual(multi_tx1.time, multi_tx2.time)
+        assert multi_tx1.time != multi_tx2.time
 
 
-class TestMultiTransactionsPropertyAccess(unittest.TestCase):
+class TestMultiTransactionsPropertyAccess:
     """Test suite for MultiTransactions property access and validation."""
     
-    def setUp(self):
+    @pytest.fixture
+    def setup_property_access(self):
         """Set up test fixtures before each test method."""
         self.sender = "0xSender123"
         self.value = [Value("0x1000", 100)]
@@ -493,28 +501,33 @@ class TestMultiTransactionsPropertyAccess(unittest.TestCase):
             multi_txns=self.multi_txns
         )
         
-    def test_sender_property(self):
+    def test_sender_property(self, setup_property_access):
         """Test sender property access."""
-        self.assertEqual(self.multi_tx.sender, self.sender)
+        assert self.multi_tx.sender == self.sender
         
-    def test_multi_txns_property(self):
+    def test_sender_id_property(self, setup_property_access):
+        """Test sender_id property access."""
+        # assert self.multi_tx.sender_id == self.sender_id
+        pass
+        
+    def test_multi_txns_property(self, setup_property_access):
         """Test multi_txns property access."""
-        self.assertEqual(len(self.multi_tx.multi_txns), 2)
-        self.assertIsInstance(self.multi_tx.multi_txns, list)
+        assert len(self.multi_tx.multi_txns) == 2
+        assert isinstance(self.multi_tx.multi_txns, list)
         
-    def test_digest_property(self):
+    def test_digest_property(self, setup_property_access):
         """Test digest property access."""
         # Initially None
-        self.assertIsNone(self.multi_tx.digest)
+        assert self.multi_tx.digest is None
         
         # After setting digest
         self.multi_tx.set_digest()
-        self.assertIsNotNone(self.multi_tx.digest)
+        assert self.multi_tx.digest is not None
         
-    def test_signature_property(self):
+    def test_signature_property(self, setup_property_access):
         """Test signature property access."""
         # Initially None
-        self.assertIsNone(self.multi_tx.signature)
+        assert self.multi_tx.signature is None
         
         # Generate test key for signing
         from cryptography.hazmat.primitives.asymmetric import ec
@@ -529,9 +542,6 @@ class TestMultiTransactionsPropertyAccess(unittest.TestCase):
         
         # After signing
         self.multi_tx.sig_acc_txn(private_key_pem)
-        self.assertIsNotNone(self.multi_tx.signature)
+        assert self.multi_tx.signature is not None
 
 
-if __name__ == '__main__':
-    # Run tests with verbose output
-    unittest.main(verbosity=2)

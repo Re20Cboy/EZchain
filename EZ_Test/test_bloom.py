@@ -3,7 +3,7 @@
 Comprehensive unit tests for Bloom filter module with compression support.
 """
 
-import unittest
+import pytest
 import sys
 import os
 import json
@@ -18,61 +18,66 @@ except ImportError as e:
     sys.exit(1)
 
 
-class TestBloomFilterBasic(unittest.TestCase):
+@pytest.fixture
+def bloom_filter_basic():
+    """Fixture for basic Bloom filter tests."""
+    small_size = 1000
+    test_items = ["apple", "banana", "cherry", "date", "elderberry"]
+    return small_size, test_items
+
+
+class TestBloomFilterBasic:
     """Test suite for basic Bloom filter functionality."""
-    
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.small_size = 1000
-        self.test_items = ["apple", "banana", "cherry", "date", "elderberry"]
         
-    def test_initialization(self):
+    def test_initialization(self, bloom_filter_basic):
         """Test BloomFilter initialization."""
         # Test default initialization
         bloom = BloomFilter()
-        self.assertEqual(len(bloom), 1024 * 1024)
-        self.assertEqual(bloom.hash_count, 5)
-        self.assertFalse(bloom.compressed)
-        self.assertIsNotNone(bloom.bit_array)
-        self.assertIsNone(bloom.compressed_bit_array)
+        assert len(bloom) == 1024 * 1024
+        assert bloom.hash_count == 5
+        assert not bloom.compressed
+        assert bloom.bit_array is not None
+        assert bloom.compressed_bit_array is None
         
         # Test custom initialization
         bloom_custom = BloomFilter(size=2000, hash_count=3)
-        self.assertEqual(len(bloom_custom), 2000)
-        self.assertEqual(bloom_custom.hash_count, 3)
+        assert len(bloom_custom) == 2000
+        assert bloom_custom.hash_count == 3
         
         # Test compressed initialization
         bloom_compressed = BloomFilter(size=1000, hash_count=3, compressed=True)
-        self.assertEqual(len(bloom_compressed), 1000)
-        self.assertTrue(bloom_compressed.compressed)
-        self.assertIsNone(bloom_compressed.bit_array)
-        self.assertIsNotNone(bloom_compressed.compressed_bit_array)
+        assert len(bloom_compressed) == 1000
+        assert bloom_compressed.compressed
+        assert bloom_compressed.bit_array is None
+        assert bloom_compressed.compressed_bit_array is not None
         
-    def test_add_and_contains(self):
+    def test_add_and_contains(self, bloom_filter_basic):
         """Test adding items and checking membership."""
-        bloom = BloomFilter(size=self.small_size, hash_count=3)
+        small_size, test_items = bloom_filter_basic
+        bloom = BloomFilter(size=small_size, hash_count=3)
         
         # Test adding items
-        for item in self.test_items:
+        for item in test_items:
             bloom.add(item)
             
         # Test positive cases (items that were added)
-        for item in self.test_items:
-            self.assertTrue(item in bloom)
+        for item in test_items:
+            assert item in bloom
             
         # Test negative cases (items that were not added)
         negative_items = ["grape", "kiwi", "lemon"]
         for item in negative_items:
-            self.assertFalse(item in bloom)
+            assert item not in bloom
             
         # Test chainable add
         result = bloom.add("mango")
-        self.assertEqual(result, bloom)
+        assert result is bloom
         
-    def test_iterable_functionality(self):
+    def test_iterable_functionality(self, bloom_filter_basic):
         """Test iterator functionality."""
+        small_size, test_items = bloom_filter_basic
         bloom = BloomFilter(size=2000, hash_count=3)
-        for item in self.test_items:
+        for item in test_items:
             bloom.add(item)
             
         # Test iteration
@@ -80,7 +85,7 @@ class TestBloomFilterBasic(unittest.TestCase):
         for bit in bloom:
             bit_count += 1
             
-        self.assertEqual(bit_count, len(bloom))
+        assert bit_count == len(bloom)
         
         # Test that iterator works with compressed state
         bloom.compress()
@@ -88,23 +93,27 @@ class TestBloomFilterBasic(unittest.TestCase):
         for bit in bloom:
             bit_count_compressed += 1
             
-        self.assertEqual(bit_count_compressed, len(bloom))
+        assert bit_count_compressed == len(bloom)
 
 
-class TestBloomFilterCompression(unittest.TestCase):
+@pytest.fixture
+def bloom_filter_compression():
+    """Fixture for compression tests."""
+    small_size = 1000
+    test_items = ["apple", "banana", "cherry", "date", "elderberry"]
+    return small_size, test_items
+
+
+class TestBloomFilterCompression:
     """Test suite for compression functionality."""
-    
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.small_size = 1000
-        self.test_items = ["apple", "banana", "cherry", "date", "elderberry"]
         
-    def test_compression_decompression(self):
+    def test_compression_decompression(self, bloom_filter_compression):
         """Test compression and decompression functionality."""
-        bloom = BloomFilter(size=self.small_size, hash_count=3)
+        small_size, test_items = bloom_filter_compression
+        bloom = BloomFilter(size=small_size, hash_count=3)
         
         # Add some items
-        for item in self.test_items:
+        for item in test_items:
             bloom.add(item)
             
         # Get initial statistics
@@ -113,29 +122,29 @@ class TestBloomFilterCompression(unittest.TestCase):
         
         # Compress
         bloom.compress()
-        self.assertTrue(bloom.compressed)
-        self.assertIsNone(bloom.bit_array)
-        self.assertIsNotNone(bloom.compressed_bit_array)
+        assert bloom.compressed
+        assert bloom.bit_array is None
+        assert bloom.compressed_bit_array is not None
         
         # Try to add item while compressed (should auto-decompress)
         bloom.add("grape")
-        self.assertFalse(bloom.compressed)  # Should be decompressed now
-        self.assertIsNotNone(bloom.bit_array)
-        self.assertTrue("grape" in bloom)
+        assert not bloom.compressed  # Should be decompressed now
+        assert bloom.bit_array is not None
+        assert "grape" in bloom
         
         # Compress again
         bloom.compress()
-        self.assertTrue(bloom.compressed)
+        assert bloom.compressed
         
         # Decompress manually
         bloom.decompress()
-        self.assertFalse(bloom.compressed)
-        self.assertIsNotNone(bloom.bit_array)
+        assert not bloom.compressed
+        assert bloom.bit_array is not None
         
         # Verify data integrity after decompression
-        for item in self.test_items:
-            self.assertTrue(item in bloom)
-        self.assertTrue("grape" in bloom)
+        for item in test_items:
+            assert item in bloom
+        assert "grape" in bloom
         
     def test_ensure_methods(self):
         """Test the ensure methods for state management."""
@@ -143,15 +152,15 @@ class TestBloomFilterCompression(unittest.TestCase):
         bloom = BloomFilter(size=1000, hash_count=3)
         bloom.add("test_item")
         bloom.compress()  # Properly compress
-        self.assertTrue(bloom.compressed)
+        assert bloom.compressed
         bloom._ensure_uncompressed()
-        self.assertFalse(bloom.compressed)
+        assert not bloom.compressed
         
         # Test ensure_compressed
         bloom = BloomFilter(size=1000, hash_count=3)
-        self.assertFalse(bloom.compressed)
+        assert not bloom.compressed
         bloom._ensure_compressed()
-        self.assertTrue(bloom.compressed)
+        assert bloom.compressed
         
     def test_compression_ratio(self):
         """Test compression ratio calculation."""
@@ -161,7 +170,7 @@ class TestBloomFilterCompression(unittest.TestCase):
         bloom_sparse.add("test_item_2")
         
         ratio_sparse = bloom_sparse.get_compression_ratio()
-        self.assertGreater(ratio_sparse, 1.0)  # Should compress well
+        assert ratio_sparse > 1.0  # Should compress well
         
         # Test with dense data (should compress less well)
         bloom_dense = BloomFilter(size=1000, hash_count=5)
@@ -170,28 +179,29 @@ class TestBloomFilterCompression(unittest.TestCase):
             bloom_dense.add(f"item_{i}")
             
         ratio_dense = bloom_dense.get_compression_ratio()
-        self.assertGreater(ratio_dense, 1.0)  # Should still compress
+        assert ratio_dense > 1.0  # Should still compress
         
-    def test_statistics(self):
+    def test_statistics(self, bloom_filter_compression):
         """Test statistics functionality."""
-        bloom = BloomFilter(size=self.small_size, hash_count=3)
+        small_size, test_items = bloom_filter_compression
+        bloom = BloomFilter(size=small_size, hash_count=3)
         
         # Initial state (all zeros)
         stats = bloom.get_statistics()
-        self.assertEqual(stats['total_bits'], self.small_size)
-        self.assertEqual(stats['set_bits'], 0)
-        self.assertEqual(stats['unset_bits'], self.small_size)
-        self.assertEqual(stats['density'], 0.0)
-        self.assertGreater(stats['compression_ratio'], 1.0)
+        assert stats['total_bits'] == small_size
+        assert stats['set_bits'] == 0
+        assert stats['unset_bits'] == small_size
+        assert stats['density'] == 0.0
+        assert stats['compression_ratio'] > 1.0
         # Note: statistics temporarily decompresses to calculate density
         
         # Add items
-        for item in self.test_items:
+        for item in test_items:
             bloom.add(item)
             
         stats_after = bloom.get_statistics()
-        self.assertGreater(stats_after['set_bits'], 0)
-        self.assertGreater(stats_after['density'], 0.0)
+        assert stats_after['set_bits'] > 0
+        assert stats_after['density'] > 0.0
         
     def test_memory_efficiency(self):
         """Test memory efficiency with compression."""
@@ -213,19 +223,15 @@ class TestBloomFilterCompression(unittest.TestCase):
         compressed_size = len(bloom.compressed_bit_array.encode('utf-8'))
         
         # Verify compression is working
-        self.assertGreater(uncompressed_size, compressed_size)
+        assert uncompressed_size > compressed_size
         
         # Verify we can still operate after compression
         bloom.add("new_item")
-        self.assertTrue("new_item" in bloom)
+        assert "new_item" in bloom
 
 
-class TestBloomFilterAdvanced(unittest.TestCase):
+class TestBloomFilterAdvanced:
     """Test suite for advanced Bloom filter functionality."""
-    
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.small_size = 1000
         
     def test_false_positive_rate(self):
         """Test false positive rate with realistic data."""
@@ -248,7 +254,7 @@ class TestBloomFilterAdvanced(unittest.TestCase):
                 
         false_positive_rate = false_positives / test_count
         # False positive rate should be reasonable (much less than 1.0)
-        self.assertLess(false_positive_rate, 0.5)  # Should be less than 50%
+        assert false_positive_rate < 0.5  # Should be less than 50%
         
     def test_error_handling(self):
         """Test error handling edge cases."""
@@ -263,7 +269,7 @@ class TestBloomFilterAdvanced(unittest.TestCase):
         # Test get_compression_ratio on empty filter
         bloom_empty = BloomFilter(size=1000, hash_count=3)
         ratio = bloom_empty.get_compression_ratio()
-        self.assertGreater(ratio, 1.0)
+        assert ratio > 1.0
         
     def test_edge_cases(self):
         """Test edge cases with various data types."""
@@ -271,17 +277,17 @@ class TestBloomFilterAdvanced(unittest.TestCase):
         
         # Test with empty string
         bloom.add("")
-        self.assertTrue("" in bloom)
+        assert "" in bloom
         
         # Test with very long strings
         long_string = "a" * 1000
         bloom.add(long_string)
-        self.assertTrue(long_string in bloom)
+        assert long_string in bloom
         
         # Test with unicode characters
         unicode_string = "你好"
         bloom.add(unicode_string)
-        self.assertTrue(unicode_string in bloom)
+        assert unicode_string in bloom
         
         # Test with various data types
         test_items = [
@@ -301,7 +307,7 @@ class TestBloomFilterAdvanced(unittest.TestCase):
             bloom.add(item)
             
         for item in string_items:
-            self.assertTrue(item in bloom)
+            assert item in bloom
             
     def test_same_item_multiple_times(self):
         """Test adding the same item multiple times."""
@@ -313,14 +319,14 @@ class TestBloomFilterAdvanced(unittest.TestCase):
             bloom.add(item)
             
         # Item should still be in filter (only one addition is needed)
-        self.assertTrue(item in bloom)
+        assert item in bloom
         
         # Test compression still works
         bloom.compress()
-        self.assertTrue(item in bloom)  # Should auto-decompress
+        assert item in bloom  # Should auto-decompress
 
 
-class TestBloomFilterJSON(unittest.TestCase):
+class TestBloomFilterJSON:
     """Test suite for JSON serialization functionality."""
     
     def test_bloom_decoder(self):
@@ -328,7 +334,7 @@ class TestBloomFilterJSON(unittest.TestCase):
         # Test with non-bloom data
         regular_dict = {'key': 'value'}
         result = bloom_decoder(regular_dict)
-        self.assertEqual(result, regular_dict)
+        assert result == regular_dict
         
     def test_json_serialization(self):
         """Test JSON serialization and deserialization."""
@@ -339,23 +345,23 @@ class TestBloomFilterJSON(unittest.TestCase):
             
         # Serialize to JSON
         json_str = json.dumps(bloom_original, cls=BloomFilterEncoder)
-        self.assertIsInstance(json_str, str)
+        assert isinstance(json_str, str)
         
         # Deserialize from JSON
         bloom_restored = json.loads(json_str, object_hook=bloom_decoder)
         
         # Verify restored object
-        self.assertEqual(len(bloom_restored), 2000)
-        self.assertEqual(bloom_restored.hash_count, 3)
-        self.assertTrue(bloom_restored.compressed)  # Should be compressed after serialization
+        assert len(bloom_restored) == 2000
+        assert bloom_restored.hash_count == 3
+        assert bloom_restored.compressed  # Should be compressed after serialization
         
         # Verify data integrity
         for item in ["test1", "test2", "test3"]:
-            self.assertTrue(item in bloom_restored)
+            assert item in bloom_restored
             
         # Test negative cases
         for item in ["nonexistent1", "nonexistent2"]:
-            self.assertFalse(item in bloom_restored)
+            assert item not in bloom_restored
             
     def test_json_encoder_compatibility(self):
         """Test that encoder properly handles compressed data."""
@@ -368,19 +374,19 @@ class TestBloomFilterJSON(unittest.TestCase):
         
         # Parse and check structure
         data = json.loads(json_str)
-        self.assertIn('size', data)
-        self.assertIn('hash_count', data)
-        self.assertIn('compressed_bit_array', data)
-        self.assertIn('compressed', data)
-        self.assertIn('__class__', data)
-        self.assertIn('__module__', data)
+        assert 'size' in data
+        assert 'hash_count' in data
+        assert 'compressed_bit_array' in data
+        assert 'compressed' in data
+        assert '__class__' in data
+        assert '__module__' in data
         
         # Verify compressed state
-        self.assertTrue(data['compressed'])
-        self.assertIsNotNone(data['compressed_bit_array'])
+        assert data['compressed']
+        assert data['compressed_bit_array'] is not None
 
 
-class TestBloomFilterPerformance(unittest.TestCase):
+class TestBloomFilterPerformance:
     """Test suite for performance-related functionality."""
     
     def test_large_dataset(self):
@@ -395,16 +401,16 @@ class TestBloomFilterPerformance(unittest.TestCase):
         # Test that all items are in filter
         for i in range(1000):
             item = f"item_{i}"
-            self.assertTrue(item in bloom)
+            assert item in bloom
             
         # Test compression with large dataset
         bloom.compress()
-        self.assertTrue(bloom.compressed)
+        assert bloom.compressed
         
         # Test that we can still query after compression
         for i in range(1000):
             item = f"item_{i}"
-            self.assertTrue(item in bloom)
+            assert item in bloom
             
     def test_compression_performance(self):
         """Test compression performance metrics."""
@@ -426,12 +432,7 @@ class TestBloomFilterPerformance(unittest.TestCase):
                 try:
                     ratio = bloom.get_compression_ratio()
                     # Acceptable ratio can be less than 1.0 for very sparse data
-                    self.assertIsInstance(ratio, (int, float))
+                    assert isinstance(ratio, (int, float))
                 except Exception:
                     # If compression fails, that's acceptable for very sparse data
                     pass
-
-
-if __name__ == '__main__':
-    # Run tests with verbose output
-    unittest.main(verbosity=2)

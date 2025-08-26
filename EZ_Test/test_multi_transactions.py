@@ -30,7 +30,6 @@ class TestMultiTransactionsInitialization(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures before each test method."""
         self.sender = "0xSender123"
-        self.sender_id = "sender_id_001"
         self.value1 = [Value("0x1000", 100)]
         self.value2 = [Value("0x2000", 200)]
         
@@ -55,12 +54,10 @@ class TestMultiTransactionsInitialization(unittest.TestCase):
         """Test basic MultiTransactions initialization."""
         multi_tx = MultiTransactions(
             sender=self.sender,
-            sender_id=self.sender_id,
             multi_txns=self.multi_txns
         )
         
         self.assertEqual(multi_tx.sender, self.sender)
-        self.assertEqual(multi_tx.sender_id, self.sender_id)
         self.assertEqual(len(multi_tx.multi_txns), 2)
         self.assertIsInstance(multi_tx.multi_txns[0], Transaction)
         self.assertIsInstance(multi_tx.multi_txns[1], Transaction)
@@ -73,7 +70,6 @@ class TestMultiTransactionsInitialization(unittest.TestCase):
         """Test MultiTransactions initialization with empty transaction list."""
         multi_tx = MultiTransactions(
             sender=self.sender,
-            sender_id=self.sender_id,
             multi_txns=[]
         )
         
@@ -85,7 +81,6 @@ class TestMultiTransactionsInitialization(unittest.TestCase):
         """Test that time is properly formatted in ISO format."""
         multi_tx = MultiTransactions(
             sender=self.sender,
-            sender_id=self.sender_id,
             multi_txns=self.multi_txns
         )
         
@@ -104,7 +99,6 @@ class TestMultiTransactionsEncoding(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures before each test method."""
         self.sender = "0xSender123"
-        self.sender_id = "sender_id_001"
         self.value = [Value("0x1000", 100)]
         
         # Create test transactions
@@ -125,7 +119,6 @@ class TestMultiTransactionsEncoding(unittest.TestCase):
         self.multi_txns = [self.tx1, self.tx2]
         self.multi_tx = MultiTransactions(
             sender=self.sender,
-            sender_id=self.sender_id,
             multi_txns=self.multi_txns
         )
         
@@ -169,7 +162,6 @@ class TestMultiTransactionsEncoding(unittest.TestCase):
         different_multi_txns = [different_tx1, different_tx2]
         original_multi_tx = MultiTransactions(
             sender="0xDifferentSender",
-            sender_id="different_id",
             multi_txns=different_multi_txns
         )
         
@@ -190,7 +182,6 @@ class TestMultiTransactionsDigest(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures before each test method."""
         self.sender = "0xSender123"
-        self.sender_id = "sender_id_001"
         self.value = [Value("0x1000", 100)]
         
         # Create test transactions
@@ -211,7 +202,6 @@ class TestMultiTransactionsDigest(unittest.TestCase):
         self.multi_txns = [self.tx1, self.tx2]
         self.multi_tx = MultiTransactions(
             sender=self.sender,
-            sender_id=self.sender_id,
             multi_txns=self.multi_txns
         )
         
@@ -242,7 +232,6 @@ class TestMultiTransactionsDigest(unittest.TestCase):
         
         different_multi_tx = MultiTransactions(
             sender="0xDifferentSender",
-            sender_id="different_id",
             multi_txns=[different_tx]
         )
         
@@ -274,7 +263,6 @@ class TestMultiTransactionsSignature(unittest.TestCase):
         )
         
         self.sender = "0xSender123"
-        self.sender_id = "sender_id_001"
         self.value = [Value("0x1000", 100)]
         
         # Create test transactions
@@ -295,7 +283,6 @@ class TestMultiTransactionsSignature(unittest.TestCase):
         self.multi_txns = [self.tx1, self.tx2]
         self.multi_tx = MultiTransactions(
             sender=self.sender,
-            sender_id=self.sender_id,
             multi_txns=self.multi_txns
         )
         
@@ -343,7 +330,6 @@ class TestMultiTransactionsSignature(unittest.TestCase):
         """Test signing empty transaction list should raise error."""
         empty_multi_tx = MultiTransactions(
             sender=self.sender,
-            sender_id=self.sender_id,
             multi_txns=[]
         )
         
@@ -359,7 +345,6 @@ class TestMultiTransactionsEdgeCases(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures before each test method."""
         self.sender = "0xSender123"
-        self.sender_id = "sender_id_001"
         self.value = [Value("0x1000", 100)]
         
         # Create test transaction
@@ -374,7 +359,6 @@ class TestMultiTransactionsEdgeCases(unittest.TestCase):
         """Test MultiTransactions with single transaction in list."""
         multi_tx = MultiTransactions(
             sender=self.sender,
-            sender_id=self.sender_id,
             multi_txns=[self.tx]
         )
         
@@ -395,7 +379,6 @@ class TestMultiTransactionsEdgeCases(unittest.TestCase):
             
         multi_tx = MultiTransactions(
             sender=self.sender,
-            sender_id=self.sender_id,
             multi_txns=transactions
         )
         
@@ -416,7 +399,6 @@ class TestMultiTransactionsEdgeCases(unittest.TestCase):
         
         multi_tx = MultiTransactions(
             sender=self.sender,
-            sender_id=self.sender_id,
             multi_txns=[tx_with_none]
         )
         
@@ -431,7 +413,6 @@ class TestMultiTransactionsTimeHandling(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures before each test method."""
         self.sender = "0xSender123"
-        self.sender_id = "sender_id_001"
         self.value = [Value("0x1000", 100)]
         
         # Create test transactions
@@ -455,7 +436,6 @@ class TestMultiTransactionsTimeHandling(unittest.TestCase):
         """Test that time appears correctly in multi-transaction."""
         multi_tx = MultiTransactions(
             sender=self.sender,
-            sender_id=self.sender_id,
             multi_txns=self.multi_txns
         )
         
@@ -469,7 +449,6 @@ class TestMultiTransactionsTimeHandling(unittest.TestCase):
         
         multi_tx1 = MultiTransactions(
             sender=self.sender,
-            sender_id=self.sender_id,
             multi_txns=self.multi_txns
         )
         
@@ -478,7 +457,6 @@ class TestMultiTransactionsTimeHandling(unittest.TestCase):
         
         multi_tx2 = MultiTransactions(
             sender=self.sender,
-            sender_id=self.sender_id,
             multi_txns=self.multi_txns
         )
         
@@ -492,7 +470,6 @@ class TestMultiTransactionsPropertyAccess(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures before each test method."""
         self.sender = "0xSender123"
-        self.sender_id = "sender_id_001"
         self.value = [Value("0x1000", 100)]
         
         # Create test transactions
@@ -513,17 +490,12 @@ class TestMultiTransactionsPropertyAccess(unittest.TestCase):
         self.multi_txns = [self.tx1, self.tx2]
         self.multi_tx = MultiTransactions(
             sender=self.sender,
-            sender_id=self.sender_id,
             multi_txns=self.multi_txns
         )
         
     def test_sender_property(self):
         """Test sender property access."""
         self.assertEqual(self.multi_tx.sender, self.sender)
-        
-    def test_sender_id_property(self):
-        """Test sender_id property access."""
-        self.assertEqual(self.multi_tx.sender_id, self.sender_id)
         
     def test_multi_txns_property(self):
         """Test multi_txns property access."""

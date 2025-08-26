@@ -23,17 +23,15 @@ class MultiTransactions:
     # Class constants
     SIGNATURE_ALGORITHM = ec.ECDSA(hashes.SHA256())
     
-    def __init__(self, sender: str, sender_id: str, multi_txns: List[Transaction]):
+    def __init__(self, sender: str, multi_txns: List[Transaction]):
         """
         Initialize MultiTransaction.
         
         Args:
             sender: Sender address
-            sender_id: Sender ID
             multi_txns: List of transactions to include
         """
         self.sender = sender
-        self.sender_id = sender_id
         self.multi_txns = multi_txns
         self.time = datetime.datetime.now().isoformat()  # Record timestamp in ISO format
         self.signature: Optional[bytes] = None
@@ -41,16 +39,23 @@ class MultiTransactions:
 
     def encode(self) -> bytes:
         """
-        Encode the multi-transaction list using pickle.
+        Encode the multi-transaction data using pickle.
         
         Returns:
             Encoded transaction data as bytes
         """
-        encoded_txns = pickle.dumps(self.multi_txns)
-        return encoded_txns
+        # Encode the entire MultiTransactions object, not just multi_txns
+        encoded_data = pickle.dumps({
+            'sender': self.sender,
+            'multi_txns': self.multi_txns,
+            'time': self.time,
+            'signature': self.signature,
+            'digest': self.digest
+        })
+        return encoded_data
 
     @staticmethod
-    def decode(to_decode: bytes) -> List[Transaction]:
+    def decode(to_decode: bytes) -> 'MultiTransactions':
         """
         Decode the multi-transaction data from pickle.
         
@@ -58,10 +63,20 @@ class MultiTransactions:
             to_decode: Encoded transaction data
             
         Returns:
-            Decoded transaction list
+            Decoded MultiTransactions object
         """
-        decoded_txns = pickle.loads(to_decode)
-        return decoded_txns
+        decoded_data = pickle.loads(to_decode)
+        multi_txn = MultiTransactions(
+            sender=decoded_data['sender'],
+            multi_txns=decoded_data['multi_txns']
+        )
+        
+        # Restore additional fields
+        multi_txn.time = decoded_data.get('time')
+        multi_txn.signature = decoded_data.get('signature')
+        multi_txn.digest = decoded_data.get('digest')
+        
+        return multi_txn
 
     def set_digest(self) -> None:
         """
@@ -117,3 +132,33 @@ class MultiTransactions:
             return True
         except InvalidSignature:
             return False
+    
+    def __len__(self) -> int:
+        """
+        Return the number of transactions in this multi-transaction.
+        
+        Returns:
+            Number of transactions
+        """
+        return len(self.multi_txns)
+    
+    def __getitem__(self, index):
+        """
+        Get transaction by index.
+        
+        Args:
+            index: Index of the transaction to retrieve
+            
+        Returns:
+            Transaction at the specified index
+        """
+        return self.multi_txns[index]
+    
+    def __iter__(self):
+        """
+        Make the MultiTransactions object iterable.
+        
+        Returns:
+            Iterator over the transactions
+        """
+        return iter(self.multi_txns)

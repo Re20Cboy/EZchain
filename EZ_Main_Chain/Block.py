@@ -6,13 +6,14 @@ sys.path.insert(0, os.path.dirname(__file__) + '/..')
 
 from EZ_Block_Units.Bloom import BloomFilter,BloomFilterEncoder
 from EZ_Block_Units.MerkleTree import MerkleTree,MerkleTreeNode
+from EZ_Tool_Box.temp_signature import temp_signature_system
 import datetime
 import hashlib
 import json
 import pickle
 
 class Block:
-    def __init__(self, index, m_tree_root, miner, pre_hash, nonce=0, bloom_size=1024*1024, bloom_hash_count=5, time=None):
+    def __init__(self, index, m_tree_root, miner, pre_hash, nonce=0, bloom_size=1024*1024, bloom_hash_count=5, time=None, version="1.0"):
         """
         Initialize a new block in the blockchain.
 
@@ -33,7 +34,8 @@ class Block:
         self.time = time if time is not None else datetime.datetime.now()
         self.miner = miner
         self.pre_hash = pre_hash
-        self.sig = unit.generate_signature(miner) if index != 0 else 0  # Digital signature implementation pending
+        self.version = version
+        self.sig = temp_signature_system.generate_signature(miner) if index != 0 else 0  # Temporary digital signature
 
     def block_to_json(self):
         """
@@ -49,9 +51,10 @@ class Block:
             "index": self.index,
             "nonce": self.nonce,
             "m_tree_root": self.m_tree_root,
-            "time": self.time,
+            "time": self.time.isoformat() if self.time else None,
             "miner": self.miner,
             "pre_hash": self.pre_hash,
+            "version": self.version,
             "sig": self.sig
         }
         # Encode the bloom filter to JSON
@@ -75,6 +78,7 @@ class Block:
         block_str += f"Time: {str(self.time)}\n"
         block_str += f"Miner: {self.miner}\n"
         block_str += f"Previous Hash: {self.pre_hash}\n"
+        block_str += f"Version: {self.version}\n"
         return block_str # no sig_to_str !!!
 
     def block_to_short_str(self):
@@ -126,6 +130,9 @@ class Block:
     def get_sig(self):
         return self.sig
 
+    def get_version(self):
+        return self.version
+
     def get_hash(self):
         """Calculate and return the hash of the block."""
         return hashlib.sha256(self.block_to_str().encode("utf-8")).hexdigest()
@@ -137,3 +144,15 @@ class Block:
     def is_in_bloom(self, item):
         """Check if an item is in the block's Bloom filter."""
         return item in self.bloom
+    
+    def verify_signature(self):
+        """
+        Verify the block's signature.
+        
+        Returns:
+            bool: True if signature is valid, False otherwise
+        """
+        if self.sig == 0:  # Genesis block has no signature
+            return True
+            
+        return temp_signature_system.verify_signature(self.sig, self.block_to_str())

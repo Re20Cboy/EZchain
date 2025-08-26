@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from EZ_Transaction.MultiTransactions import MultiTransactions
 from EZ_Transaction.SingleTransaction import Transaction
 from EZ_Value.Value import Value
-from EZ_Transaction_Pool.TransactionPool import MultiTxnsPool, ValidationResult
+from EZ_Transaction_Pool.TransactionPool import TransactionPool, ValidationResult
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import serialization
 
@@ -25,7 +25,7 @@ class TestMultiTxnsPool(unittest.TestCase):
         self.temp_db.close()
         
         # Create pool instance with temporary database
-        self.pool = MultiTxnsPool(self.temp_db.name)
+        self.pool = TransactionPool(self.temp_db.name)
         
         # Generate test keys
         self.private_key = ec.generate_private_key(ec.SECP256R1())
@@ -72,7 +72,6 @@ class TestMultiTxnsPool(unittest.TestCase):
         # Create test MultiTransactions
         self.multi_txn = MultiTransactions(
             sender=self.test_sender,
-            sender_id="sender_id_test",
             multi_txns=[self.txn1, self.txn2]
         )
         
@@ -125,7 +124,6 @@ class TestMultiTxnsPool(unittest.TestCase):
         """Test validation of empty MultiTransactions."""
         empty_multi_txn = MultiTransactions(
             sender=self.test_sender,
-            sender_id="test_id",
             multi_txns=[]
         )
         
@@ -139,21 +137,19 @@ class TestMultiTxnsPool(unittest.TestCase):
         """Test validation of MultiTransactions with missing sender."""
         invalid_multi_txn = MultiTransactions(
             sender="",
-            sender_id="test_id",
             multi_txns=[self.txn1]
         )
         
         validation_result = self.pool.validate_multi_transactions(invalid_multi_txn, self.public_key_pem)
         
         self.assertFalse(validation_result.is_valid)
-        self.assertEqual(validation_result.error_message, "Missing sender or sender_id")
+        self.assertEqual(validation_result.error_message, "Missing sender")
         self.assertFalse(validation_result.structural_valid)
     
     def test_validate_multi_transactions_invalid_transaction_type(self):
         """Test validation with invalid transaction type."""
         invalid_multi_txn = MultiTransactions(
             sender=self.test_sender,
-            sender_id="test_id",
             multi_txns=[self.txn1, "invalid_transaction"]
         )
         
@@ -176,7 +172,6 @@ class TestMultiTxnsPool(unittest.TestCase):
         
         invalid_multi_txn = MultiTransactions(
             sender=self.test_sender,
-            sender_id="test_id",
             multi_txns=[self.txn1, different_txn]
         )
         
@@ -190,7 +185,6 @@ class TestMultiTxnsPool(unittest.TestCase):
         """Test validation of MultiTransactions without signature."""
         unsigned_multi_txn = MultiTransactions(
             sender=self.test_sender,
-            sender_id="test_id",
             multi_txns=[self.txn1]
         )
         
@@ -212,7 +206,6 @@ class TestMultiTxnsPool(unittest.TestCase):
         
         wrong_multi_txn = MultiTransactions(
             sender=self.test_sender,
-            sender_id="test_id",
             multi_txns=[self.txn1]
         )
         wrong_multi_txn.sig_acc_txn(wrong_key_pem)
@@ -243,7 +236,6 @@ class TestMultiTxnsPool(unittest.TestCase):
         
         invalid_multi_txn = MultiTransactions(
             sender=self.test_sender,
-            sender_id="test_id",
             multi_txns=[invalid_txn]
         )
         invalid_multi_txn.sig_acc_txn(self.private_key_pem)
@@ -290,14 +282,13 @@ class TestMultiTxnsPool(unittest.TestCase):
         """Test addition of invalid MultiTransactions."""
         invalid_multi_txn = MultiTransactions(
             sender="",
-            sender_id="test_id",
             multi_txns=[self.txn1]
         )
         
         success, message = self.pool.add_multi_transactions(invalid_multi_txn, self.public_key_pem)
         
         self.assertFalse(success)
-        self.assertIn("Missing sender or sender_id", message)
+        self.assertIn("Missing sender", message)
         
         # Check stats
         self.assertEqual(self.pool.stats['total_received'], 1)
@@ -314,7 +305,7 @@ class TestMultiTxnsPool(unittest.TestCase):
         success2, message2 = self.pool.add_multi_transactions(self.multi_txn, self.public_key_pem)
         
         self.assertFalse(success2)
-        self.assertEqual(message2, "Duplicate MultiTransactions")
+        self.assertEqual(message2, "Duplicate MultiTransactions found")
         
         # Check stats
         self.assertEqual(self.pool.stats['total_received'], 2)
@@ -377,7 +368,6 @@ class TestMultiTxnsPool(unittest.TestCase):
         # Create another MultiTransactions
         multi_txn2 = MultiTransactions(
             sender=self.test_sender,
-            sender_id="sender_id_test2",
             multi_txns=[self.txn1]
         )
         multi_txn2.sig_acc_txn(self.private_key_pem)
@@ -399,7 +389,6 @@ class TestMultiTxnsPool(unittest.TestCase):
         # Create another MultiTransactions
         multi_txn2 = MultiTransactions(
             sender=self.test_sender,
-            sender_id="sender_id_test2",
             multi_txns=[self.txn1]
         )
         multi_txn2.sig_acc_txn(self.private_key_pem)
@@ -439,7 +428,6 @@ class TestMultiTxnsPool(unittest.TestCase):
                 # Create unique MultiTransactions for each thread
                 multi_txn = MultiTransactions(
                     sender=f"sender_{thread_id}",
-                    sender_id=f"sender_id_{thread_id}",
                     multi_txns=[self.txn1]
                 )
                 multi_txn.sig_acc_txn(self.private_key_pem)
@@ -478,7 +466,7 @@ class TestMultiTxnsPool(unittest.TestCase):
         self.pool.add_multi_transactions(self.multi_txn, self.public_key_pem)
         
         # Create new pool instance with same database
-        new_pool = MultiTxnsPool(self.temp_db.name)
+        new_pool = TransactionPool(self.temp_db.name)
         
         # Check that data persists
         self.assertEqual(len(new_pool.pool), 1)
@@ -496,7 +484,6 @@ class TestMultiTxnsPool(unittest.TestCase):
         
         multi_txn2 = MultiTransactions(
             sender=self.test_sender,
-            sender_id="sender_id_test2",
             multi_txns=[self.txn1]
         )
         multi_txn2.sig_acc_txn(self.private_key_pem)

@@ -36,12 +36,12 @@ class ValidationResult:
         if self.duplicates_found is None:
             self.duplicates_found = []
 
-class MultiTxnsPool:
-    """MultiTransactions pool with validation and database storage"""
+class TransactionPool:
+    """Transaction pool with validation and database storage"""
 
     def __init__(self, db_path: str = "transaction_pool.db"):
         self.pool: List[MultiTransactions] = []
-        self.sender_index: Dict[str, List[int]] = {}  # sender_id -> indices in pool
+        self.sender_index: Dict[str, List[int]] = {}  # sender -> indices in pool
         self.digest_index: Dict[str, int] = {}  # digest -> index in pool
         self.db_path = db_path
         self.lock = threading.RLock()
@@ -54,6 +54,9 @@ class MultiTxnsPool:
         
         # Initialize database
         self._init_database()
+        
+        # Load existing data from database
+        self._load_from_database()
         
         # Start periodic cleanup
         self._start_cleanup_thread()
@@ -72,7 +75,6 @@ class MultiTxnsPool:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     digest TEXT UNIQUE NOT NULL,
                     sender TEXT NOT NULL,
-                    sender_id TEXT NOT NULL,
                     timestamp TEXT NOT NULL,
                     signature TEXT NOT NULL,
                     transactions_blob BLOB NOT NULL,
@@ -95,10 +97,6 @@ class MultiTxnsPool:
             ''')
             
             cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_sender_id ON multi_transactions(sender_id)
-            ''')
-            
-            cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_digest ON multi_transactions(digest)
             ''')
             
@@ -111,6 +109,91 @@ class MultiTxnsPool:
             
         except sqlite3.Error as e:
             print(f"Database initialization error: {e}")
+    
+    def _load_from_database(self):
+        """Load existing MultiTransactions from database into memory"""
+        try:
+            import sqlite3
+            
+            with self.lock:
+                conn = sqlite3.connect(self.db_path)
+                cursor = conn.cursor()
+                
+                # Load all valid, unprocessed MultiTransactions
+                cursor.execute('''
+                    SELECT digest, sender, timestamp, signature, transactions_blob 
+                    FROM multi_transactions 
+                    WHERE is_valid = TRUE AND processed = FALSE
+                ''')
+                
+                rows = cursor.fetchall()
+                
+                for row in rows:
+                    digest, sender, timestamp, signature_hex, transactions_blob = row
+                    
+                    try:
+                        # Decode transactions blob to get MultiTransactions
+                        multi_txn = MultiTransactions.decode(transactions_blob)
+                        
+                        # Restore additional fields that might not be in the decoded object
+                        if not hasattr(multi_txn, 'time') or multi_txn.time is None:
+                            multi_txn.time = timestamp
+                        
+                        # Convert signature from hex if it exists and signature is not already set
+                        if signature_hex and not multi_txn.signature:
+                            multi_txn.signature = bytes.fromhex(signature_hex)
+                        
+                        # Ensure digest is set
+                        if not multi_txn.digest:
+                            multi_txn.digest = digest
+                        
+                        # Ensure sender is set
+                        if not multi_txn.sender:
+                            multi_txn.sender = sender
+                        
+                        # Add to pool
+                        self.pool.append(multi_txn)
+                        index = len(self.pool) - 1
+                        
+                        # Update indices
+                        if sender not in self.sender_index:
+                            self.sender_index[sender] = []
+                        self.sender_index[sender].append(index)
+                        self.digest_index[digest] = index
+                        
+                    except Exception as e:
+                        print(f"Error decoding transaction with digest {digest}: {e}")
+                        continue
+                
+                # Load stats from database
+                cursor.execute('''
+                    SELECT COUNT(*) FROM multi_transactions 
+                    WHERE is_valid = TRUE AND processed = FALSE
+                ''')
+                valid_count = cursor.fetchone()[0]
+                
+                cursor.execute('''
+                    SELECT COUNT(*) FROM multi_transactions 
+                    WHERE is_valid = FALSE AND processed = FALSE
+                ''')
+                invalid_count = cursor.fetchone()[0]
+                
+                cursor.execute('''
+                    SELECT COUNT(*) FROM multi_transactions 
+                    WHERE processed = FALSE
+                ''')
+                total_count = cursor.fetchone()[0]
+                
+                # Update stats to match database
+                self.stats['total_received'] = total_count
+                self.stats['valid_received'] = valid_count
+                self.stats['invalid_received'] = invalid_count
+                
+                conn.commit()
+                conn.close()
+                
+        except Exception as e:
+            print(f"Error loading from database: {e}")
     
     def _start_cleanup_thread(self):
         """Start background thread for cleaning up old transactions"""
@@ -155,11 +238,11 @@ class MultiTxnsPool:
                         
                         # Remove from sender_index
                         multi_txn = self.pool[index]
-                        if multi_txn.sender_id in self.sender_index:
-                            if index in self.sender_index[multi_txn.sender_id]:
-                                self.sender_index[multi_txn.sender_id].remove(index)
-                                if not self.sender_index[multi_txn.sender_id]:
-                                    del self.sender_index[multi_txn.sender_id]
+                        if multi_txn.sender in self.sender_index:
+                            if index in self.sender_index[multi_txn.sender]:
+                                self.sender_index[multi_txn.sender].remove(index)
+                                if not self.sender_index[multi_txn.sender]:
+                                    del self.sender_index[multi_txn.sender]
                         
                         # Remove from pool
                         del self.pool[index]
@@ -179,9 +262,9 @@ class MultiTxnsPool:
         self.digest_index.clear()
         
         for i, multi_txn in enumerate(self.pool):
-            if multi_txn.sender_id not in self.sender_index:
-                self.sender_index[multi_txn.sender_id] = []
-            self.sender_index[multi_txn.sender_id].append(i)
+            if multi_txn.sender not in self.sender_index:
+                self.sender_index[multi_txn.sender] = []
+            self.sender_index[multi_txn.sender].append(i)
             self.digest_index[multi_txn.digest] = i
 
     def _persist_to_database(self, multi_txn: MultiTransactions, validation_result: ValidationResult):
@@ -196,12 +279,11 @@ class MultiTxnsPool:
                 # Insert or replace MultiTransactions
                 cursor.execute('''
                     INSERT OR REPLACE INTO multi_transactions 
-                    (digest, sender, sender_id, timestamp, signature, transactions_blob, is_valid, validation_time)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (digest, sender, timestamp, signature, transactions_blob, is_valid, validation_time)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     multi_txn.digest,
                     multi_txn.sender,
-                    multi_txn.sender_id,
                     multi_txn.time,
                     multi_txn.signature.hex() if multi_txn.signature else None,
                     multi_txn.encode(),
@@ -246,9 +328,9 @@ class MultiTxnsPool:
                 return validation_result
             
             # 2. Check structural correctness
-            if not multi_txn.sender or not multi_txn.sender_id:
+            if not multi_txn.sender:
                 validation_result.is_valid = False
-                validation_result.error_message = "Missing sender or sender_id"
+                validation_result.error_message = "Missing sender"
                 validation_result.structural_valid = False
                 return validation_result
             
@@ -347,13 +429,12 @@ class MultiTxnsPool:
             self.stats['total_received'] += 1
             
             if not validation_result.is_valid:
-                self.stats['invalid_received'] += 1
+                # Check if it's a duplicate
+                if validation_result.duplicates_found:
+                    self.stats['duplicates'] += 1
+                else:
+                    self.stats['invalid_received'] += 1
                 return False, validation_result.error_message
-            
-            # Check for duplicates
-            if multi_txn.digest in self.digest_index:
-                self.stats['duplicates'] += 1
-                return False, "Duplicate MultiTransactions"
             
             # Add to pool
             with self.lock:
@@ -361,9 +442,9 @@ class MultiTxnsPool:
                 index = len(self.pool) - 1
                 
                 # Update indices
-                if multi_txn.sender_id not in self.sender_index:
-                    self.sender_index[multi_txn.sender_id] = []
-                self.sender_index[multi_txn.sender_id].append(index)
+                if multi_txn.sender not in self.sender_index:
+                    self.sender_index[multi_txn.sender] = []
+                self.sender_index[multi_txn.sender].append(index)
                 self.digest_index[multi_txn.digest] = index
                 
                 # Persist to database
@@ -375,13 +456,13 @@ class MultiTxnsPool:
         except Exception as e:
             return False, f"Error adding MultiTransactions: {str(e)}"
 
-    def get_multi_transactions_by_sender(self, sender_id: str) -> List[MultiTransactions]:
+    def get_multi_transactions_by_sender(self, sender: str) -> List[MultiTransactions]:
         """Get all MultiTransactions from a specific sender"""
         with self.lock:
-            if sender_id not in self.sender_index:
+            if sender not in self.sender_index:
                 return []
             
-            return [self.pool[i] for i in self.sender_index[sender_id]]
+            return [self.pool[i] for i in self.sender_index[sender]]
 
     def get_multi_transactions_by_digest(self, digest: str) -> Optional[MultiTransactions]:
         """Get MultiTransactions by digest"""
@@ -406,11 +487,11 @@ class MultiTxnsPool:
                 
                 # Remove from indices
                 del self.digest_index[digest]
-                if multi_txn.sender_id in self.sender_index:
-                    if index in self.sender_index[multi_txn.sender_id]:
-                        self.sender_index[multi_txn.sender_id].remove(index)
-                        if not self.sender_index[multi_txn.sender_id]:
-                            del self.sender_index[multi_txn.sender_id]
+                if multi_txn.sender in self.sender_index:
+                    if index in self.sender_index[multi_txn.sender]:
+                        self.sender_index[multi_txn.sender].remove(index)
+                        if not self.sender_index[multi_txn.sender]:
+                            del self.sender_index[multi_txn.sender]
                 
                 # Rebuild indices
                 self._rebuild_indices()
@@ -447,7 +528,8 @@ class MultiTxnsPool:
     def get_all_multi_transactions(self) -> List[MultiTransactions]:
         """Get all MultiTransactions in the pool"""
         with self.lock:
-            return self.pool.copy()
+            # Return deep copies of MultiTransactions objects
+            return [copy.deepcopy(multi_txn) for multi_txn in self.pool]
 
     def clear_pool(self):
         """Clear all MultiTransactions from pool"""

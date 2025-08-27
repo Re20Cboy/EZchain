@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Comprehensive unit tests for AccountValueCollection class with linked list structure and state management.
+Comprehensive unit tests for AccountValueCollection class with linked list management functionality.
 """
 
-import unittest
+import pytest
 import sys
 import os
 
@@ -14,822 +14,727 @@ try:
     from EZ_Value.AccountValueCollection import AccountValueCollection, ValueNode
     from EZ_Value.Value import Value, ValueState
 except ImportError as e:
-    print(f"Error importing modules: {e}")
+    print(f"Error importing AccountValueCollection: {e}")
     sys.exit(1)
 
 
-class TestValueNodeInitialization(unittest.TestCase):
-    """Test suite for ValueNode class initialization."""
+@pytest.fixture
+def account_address():
+    """Fixture for account address."""
+    return "0x1234567890abcdef"
+
+
+@pytest.fixture
+def test_values():
+    """Fixture for test values."""
+    return [
+        Value("0x1000", 100, ValueState.UNSPENT),
+        Value("0x2000", 200, ValueState.SELECTED),
+        Value("0x3000", 150, ValueState.LOCAL_COMMITTED),
+        Value("0x4000", 300, ValueState.CONFIRMED),
+        Value("0x5000", 250, ValueState.UNSPENT)
+    ]
+
+
+@pytest.fixture
+def empty_collection(account_address):
+    """Fixture for empty AccountValueCollection."""
+    return AccountValueCollection(account_address)
+
+
+@pytest.fixture
+def populated_collection(account_address, test_values):
+    """Fixture for AccountValueCollection with test values."""
+    collection = AccountValueCollection(account_address)
+    for value in test_values:
+        collection.add_value(value)
+    return collection
+
+
+class TestAccountValueCollectionInitialization:
+    """Test suite for AccountValueCollection initialization."""
     
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.test_value = Value("0x1000", 100)
+    def test_empty_initialization(self, account_address):
+        """Test initialization of empty collection."""
+        collection = AccountValueCollection(account_address)
         
-    def test_value_node_initialization(self):
+        assert collection.account_address == account_address
+        assert collection.head is None
+        assert collection.tail is None
+        assert collection.size == 0
+        assert len(collection._index_map) == 0
+        assert len(collection._state_index) == 0
+        assert len(collection._decimal_begin_map) == 0
+        
+    def test_length_operations(self, empty_collection):
+        """Test length operations on empty collection."""
+        assert len(empty_collection) == 0
+        assert empty_collection.size == 0
+        
+    def test_iteration_empty(self, empty_collection):
+        """Test iteration over empty collection."""
+        values = list(empty_collection)
+        assert len(values) == 0
+        
+    def test_contains_empty(self, empty_collection, test_values):
+        """Test contains operation on empty collection."""
+        assert test_values[0] not in empty_collection
+
+
+class TestAccountValueCollectionAddition:
+    """Test suite for adding values to collection."""
+    
+    def test_add_single_value_end(self, empty_collection, test_values):
+        """Test adding single value at end."""
+        value = test_values[0]
+        result = empty_collection.add_value(value)
+        
+        assert result is True
+        assert len(empty_collection) == 1
+        assert empty_collection.head is not None
+        assert empty_collection.tail is not None
+        assert empty_collection.head == empty_collection.tail
+        assert empty_collection.head.value == value
+        
+    def test_add_single_value_beginning(self, empty_collection, test_values):
+        """Test adding single value at beginning."""
+        value = test_values[0]
+        result = empty_collection.add_value(value, position="beginning")
+        
+        assert result is True
+        assert len(empty_collection) == 1
+        assert empty_collection.head is not None
+        assert empty_collection.tail is not None
+        assert empty_collection.head == empty_collection.tail
+        assert empty_collection.head.value == value
+        
+    def test_add_multiple_values_end(self, empty_collection, test_values):
+        """Test adding multiple values at end."""
+        for i, value in enumerate(test_values):
+            result = empty_collection.add_value(value, position="end")
+            assert result is True
+            assert len(empty_collection) == i + 1
+            
+        # Check linked list order
+        current = empty_collection.head
+        for i, value in enumerate(test_values):
+            assert current.value == value
+            if i < len(test_values) - 1:
+                current = current.next
+        assert current == empty_collection.tail
+        
+    def test_add_multiple_values_beginning(self, empty_collection, test_values):
+        """Test adding multiple values at beginning."""
+        for i, value in enumerate(test_values):
+            result = empty_collection.add_value(value, position="beginning")
+            assert result is True
+            assert len(empty_collection) == i + 1
+            
+        # Check linked list order (should be reversed)
+        current = empty_collection.head
+        for i, value in enumerate(reversed(test_values)):
+            assert current.value == value
+            if i < len(test_values) - 1:
+                current = current.next
+        assert current == empty_collection.tail
+        
+    def test_add_invalid_position(self, empty_collection, test_values):
+        """Test adding value with invalid position."""
+        with pytest.raises(ValueError, match="position must be 'end' or 'beginning'"):
+            empty_collection.add_value(test_values[0], position="invalid")
+            
+    def test_add_duplicate_values(self, empty_collection, test_values):
+        """Test adding duplicate values."""
+        value = test_values[0]
+        empty_collection.add_value(value)
+        empty_collection.add_value(value)  # Same value again
+        
+        assert len(empty_collection) == 2
+        assert empty_collection.head.value == value
+        assert empty_collection.tail.value == value
+        assert empty_collection.head != empty_collection.tail
+
+
+class TestAccountValueCollectionRemoval:
+    """Test suite for removing values from collection."""
+    
+    def test_remove_single_value(self, populated_collection, test_values):
+        """Test removing single value."""
+        # Get the node_id of the first value
+        node_id = list(populated_collection._index_map.keys())[0]
+        
+        result = populated_collection.remove_value(node_id)
+        
+        assert result is True
+        assert len(populated_collection) == len(test_values) - 1
+        assert node_id not in populated_collection._index_map
+        
+    def test_remove_nonexistent_value(self, populated_collection):
+        """Test removing nonexistent value."""
+        result = populated_collection.remove_value("nonexistent_id")
+        assert result is False
+        assert len(populated_collection) == 5  # Should remain unchanged
+        
+    def test_remove_head_value(self, populated_collection, test_values):
+        """Test removing head value."""
+        head_node_id = populated_collection.head.node_id
+        
+        result = populated_collection.remove_value(head_node_id)
+        
+        assert result is True
+        assert len(populated_collection) == 4
+        assert populated_collection.head.value == test_values[1]  # Second value should be new head
+        
+    def test_remove_tail_value(self, populated_collection, test_values):
+        """Test removing tail value."""
+        tail_node_id = populated_collection.tail.node_id
+        
+        result = populated_collection.remove_value(tail_node_id)
+        
+        assert result is True
+        assert len(populated_collection) == 4
+        assert populated_collection.tail.value == test_values[-2]  # Second to last value should be new tail
+        
+    def test_remove_middle_value(self, populated_collection, test_values):
+        """Test removing middle value."""
+        # Remove the third value
+        current = populated_collection.head
+        for _ in range(2):  # Move to third node
+            current = current.next
+        middle_node_id = current.node_id
+        
+        result = populated_collection.remove_value(middle_node_id)
+        
+        assert result is True
+        assert len(populated_collection) == 4
+        
+        # Check linked list integrity
+        values = list(populated_collection)
+        expected_values = [test_values[0], test_values[1], test_values[3], test_values[4]]
+        assert values == expected_values
+        
+    def test_remove_all_values(self, populated_collection):
+        """Test removing all values."""
+        # Get initial node IDs
+        initial_node_ids = list(populated_collection._index_map.keys())
+        
+        for node_id in initial_node_ids:
+            result = populated_collection.remove_value(node_id)
+            assert result is True
+            
+        assert len(populated_collection) == 0
+        assert populated_collection.head is None
+        assert populated_collection.tail is None
+        assert len(populated_collection._index_map) == 0
+        assert len(populated_collection._decimal_begin_map) == 0
+        # Check that all state index sets are empty
+        for state_set in populated_collection._state_index.values():
+            assert len(state_set) == 0
+
+
+class TestAccountValueCollectionStateManagement:
+    """Test suite for state management functionality."""
+    
+    def test_update_value_state(self, populated_collection):
+        """Test updating value state."""
+        node_id = list(populated_collection._index_map.keys())[0]
+        old_state = populated_collection._index_map[node_id].value.state
+        
+        result = populated_collection.update_value_state(node_id, ValueState.CONFIRMED)
+        
+        assert result is True
+        new_state = populated_collection._index_map[node_id].value.state
+        assert new_state == ValueState.CONFIRMED
+        assert new_state != old_state
+        
+        # Check state index is updated
+        assert node_id not in populated_collection._state_index[old_state]
+        assert node_id in populated_collection._state_index[ValueState.CONFIRMED]
+        
+    def test_update_value_state_same_state(self, populated_collection):
+        """Test updating value to same state."""
+        node_id = list(populated_collection._index_map.keys())[0]
+        node = populated_collection._index_map[node_id]
+        current_state = node.value.state
+        
+        result = populated_collection.update_value_state(node_id, current_state)
+        
+        assert result is True
+        assert node.value.state == current_state
+        
+    def test_update_value_state_nonexistent(self, populated_collection):
+        """Test updating state of nonexistent value."""
+        result = populated_collection.update_value_state("nonexistent_id", ValueState.CONFIRMED)
+        assert result is False
+        
+    def test_find_by_state(self, populated_collection, test_values):
+        """Test finding values by state."""
+        # Find UNSPENT values
+        unspent_values = populated_collection.find_by_state(ValueState.UNSPENT)
+        expected_unspent = [v for v in test_values if v.state == ValueState.UNSPENT]
+        assert len(unspent_values) == len(expected_unspent)
+        
+        # Check all found values are indeed UNSPENT
+        for value in unspent_values:
+            assert value.state == ValueState.UNSPENT
+            
+        # Find values by other states
+        for state in ValueState:
+            found_values = populated_collection.find_by_state(state)
+            expected_values = [v for v in test_values if v.state == state]
+            assert len(found_values) == len(expected_values)
+            
+    def test_find_by_state_empty(self, populated_collection):
+        """Test finding values by state when no values match."""
+        # Assuming no values with this state
+        rare_state = ValueState.CONFIRMED  # This might have values, adjust if needed
+        found_values = populated_collection.find_by_state(rare_state)
+        assert isinstance(found_values, list)
+
+
+class TestAccountValueCollectionValueSplitting:
+    """Test suite for value splitting functionality."""
+    
+    def test_split_value_valid(self, empty_collection, test_values):
+        """Test valid value splitting."""
+        # Add a value that can be split
+        value = Value("0x1000", 200, ValueState.UNSPENT)
+        empty_collection.add_value(value)
+        
+        node_id = list(empty_collection._index_map.keys())[0]
+        
+        v1, v2 = empty_collection.split_value(node_id, 50)
+        
+        assert v1 is not None
+        assert v2 is not None
+        assert v1.value_num == 150
+        assert v2.value_num == 50
+        assert v1.begin_index == "0x1000"
+        assert v2.begin_index == "0x1096"  # 0x1000 + 150 - 1 + 1 = 0x1096
+        assert v1.state == ValueState.UNSPENT
+        assert v2.state == ValueState.UNSPENT
+        
+        # Check collection size increased
+        assert len(empty_collection) == 2
+        
+    def test_split_value_invalid_node_id(self, populated_collection):
+        """Test splitting value with invalid node_id."""
+        result = populated_collection.split_value("nonexistent_id", 50)
+        assert result == (None, None)
+        
+    def test_split_value_invalid_change(self, populated_collection):
+        """Test splitting value with invalid change amount."""
+        node_id = list(populated_collection._index_map.keys())[0]
+        
+        # Test change <= 0
+        result = populated_collection.split_value(node_id, 0)
+        assert result == (None, None)
+        
+        result = populated_collection.split_value(node_id, -10)
+        assert result == (None, None)
+        
+        # Test change >= value_num
+        node = populated_collection._index_map[node_id]
+        result = populated_collection.split_value(node_id, node.value.value_num)
+        assert result == (None, None)
+        
+        result = populated_collection.split_value(node_id, node.value.value_num + 1)
+        assert result == (None, None)
+        
+    def test_split_value_linked_list_integrity(self, empty_collection, test_values):
+        """Test that splitting maintains linked list integrity."""
+        value = Value("0x1000", 200, ValueState.UNSPENT)
+        empty_collection.add_value(value)
+        
+        node_id = list(empty_collection._index_map.keys())[0]
+        
+        v1, v2 = empty_collection.split_value(node_id, 50)
+        
+        # Check linked list structure
+        assert len(empty_collection) == 2
+        assert empty_collection.head.value == v1
+        assert empty_collection.tail.value == v2
+        assert empty_collection.head.next == empty_collection.tail
+        assert empty_collection.tail.prev == empty_collection.head
+
+
+class TestAccountValueCollectionValueMerging:
+    """Test suite for value merging functionality."""
+    
+    def test_merge_adjacent_values_valid(self, empty_collection):
+        """Test valid merging of adjacent values."""
+        # Create two adjacent values with same state
+        value1 = Value("0x1000", 100, ValueState.UNSPENT)
+        value2 = Value("0x1064", 100, ValueState.UNSPENT)  # Adjacent to value1
+        
+        empty_collection.add_value(value1)
+        empty_collection.add_value(value2)
+        
+        node_id1 = list(empty_collection._index_map.keys())[0]
+        node_id2 = list(empty_collection._index_map.keys())[1]
+        
+        merged_value = empty_collection.merge_adjacent_values(node_id1, node_id2)
+        
+        assert merged_value is not None
+        assert merged_value.value_num == 200
+        assert merged_value.begin_index == "0x1000"
+        assert merged_value.state == ValueState.UNSPENT
+        
+        # Check collection size decreased
+        assert len(empty_collection) == 1
+        
+    def test_merge_non_adjacent_values(self, empty_collection):
+        """Test merging non-adjacent values."""
+        value1 = Value("0x1000", 100, ValueState.UNSPENT)
+        value2 = Value("0x2000", 100, ValueState.UNSPENT)  # Not adjacent
+        
+        empty_collection.add_value(value1)
+        empty_collection.add_value(value2)
+        
+        # Get node IDs - need to check which nodes are actually adjacent in the list
+        node_ids = list(empty_collection._index_map.keys())
+        node_id1 = node_ids[0]
+        node_id2 = node_ids[1]
+        
+        # Check if they are actually adjacent in the linked list
+        node1 = empty_collection._index_map[node_id1]
+        node2 = empty_collection._index_map[node_id2]
+        
+        # If they are not adjacent in the linked list, merge should return None
+        if node1.next != node2:
+            merged_value = empty_collection.merge_adjacent_values(node_id1, node_id2)
+            assert merged_value is None
+            assert len(empty_collection) == 2  # Size should remain unchanged
+        
+    def test_merge_different_states(self, empty_collection):
+        """Test merging values with different states."""
+        value1 = Value("0x1000", 100, ValueState.UNSPENT)
+        value2 = Value("0x1064", 100, ValueState.SELECTED)  # Different state
+        
+        empty_collection.add_value(value1)
+        empty_collection.add_value(value2)
+        
+        node_id1 = list(empty_collection._index_map.keys())[0]
+        node_id2 = list(empty_collection._index_map.keys())[1]
+        
+        merged_value = empty_collection.merge_adjacent_values(node_id1, node_id2)
+        
+        assert merged_value is None
+        assert len(empty_collection) == 2  # Size should remain unchanged
+        
+    def test_merge_invalid_node_ids(self, empty_collection):
+        """Test merging with invalid node IDs."""
+        merged_value = empty_collection.merge_adjacent_values("invalid1", "invalid2")
+        assert merged_value is None
+
+
+class TestAccountValueCollectionSearchAndFiltering:
+    """Test suite for search and filtering functionality."""
+    
+    def test_find_by_range(self, empty_collection):
+        """Test finding values by decimal range."""
+        # Add test values
+        values = [
+            Value("0x1000", 100, ValueState.UNSPENT),   # 4096-4195
+            Value("0x2000", 200, ValueState.UNSPENT),   # 8192-8391
+            Value("0x3000", 150, ValueState.UNSPENT),   # 12288-12437
+        ]
+        
+        for value in values:
+            empty_collection.add_value(value)
+            
+        # Test range that includes first value
+        result = empty_collection.find_by_range(4000, 4200)
+        assert len(result) == 1
+        assert result[0].begin_index == "0x1000"
+        
+        # Test range that includes multiple values
+        result = empty_collection.find_by_range(4000, 9000)
+        assert len(result) == 2
+        
+        # Test range that includes no values
+        result = empty_collection.find_by_range(5000, 6000)
+        assert len(result) == 0
+        
+    def test_find_intersecting_values(self, empty_collection):
+        """Test finding intersecting values."""
+        # Add test values with actual overlapping ranges
+        values = [
+            Value("0x1000", 200, ValueState.UNSPENT),   # 4096-4295
+            Value("0x1080", 100, ValueState.UNSPENT),   # 4224-4323 (overlaps with first)
+            Value("0x3000", 150, ValueState.UNSPENT),   # 12288-12437 (no overlap)
+        ]
+        
+        for value in values:
+            empty_collection.add_value(value)
+            
+        # Test target that intersects with first two values
+        target = Value("0x1050", 300, ValueState.UNSPENT)  # 4176-4475
+        result = empty_collection.find_intersecting_values(target)
+        
+        assert len(result) == 2
+        result_begin_indices = [v.begin_index for v in result]
+        assert "0x1000" in result_begin_indices
+        assert "0x1080" in result_begin_indices
+        
+        # Test target that intersects with no values
+        target = Value("0x4000", 100, ValueState.UNSPENT)
+        result = empty_collection.find_intersecting_values(target)
+        assert len(result) == 0
+        
+    def test_get_all_values(self, populated_collection, test_values):
+        """Test getting all values."""
+        all_values = populated_collection.get_all_values()
+        
+        assert len(all_values) == len(test_values)
+        # Check that all original values are present
+        for test_value in test_values:
+            assert test_value in all_values
+            
+    def test_get_values_sorted_by_begin_index(self, populated_collection):
+        """Test getting values sorted by begin index."""
+        sorted_values = populated_collection.get_values_sorted_by_begin_index()
+        
+        # Check that values are sorted
+        for i in range(len(sorted_values) - 1):
+            current_begin = sorted_values[i].get_decimal_begin_index()
+            next_begin = sorted_values[i + 1].get_decimal_begin_index()
+            assert current_begin <= next_begin
+            
+    def test_iteration(self, populated_collection, test_values):
+        """Test iteration over collection."""
+        iterated_values = list(populated_collection)
+        
+        assert len(iterated_values) == len(test_values)
+        # Check that all values are present
+        for test_value in test_values:
+            assert test_value in iterated_values
+            
+    def test_contains(self, populated_collection, test_values):
+        """Test contains operation."""
+        # Test with existing values
+        for value in test_values:
+            assert value in populated_collection
+            
+        # Test with non-existing value
+        new_value = Value("0x9999", 100, ValueState.UNSPENT)
+        assert new_value not in populated_collection
+
+
+class TestAccountValueCollectionBalanceCalculation:
+    """Test suite for balance calculation functionality."""
+    
+    def test_get_balance_by_state(self, populated_collection, test_values):
+        """Test getting balance by state."""
+        for state in ValueState:
+            expected_balance = sum(v.value_num for v in test_values if v.state == state)
+            actual_balance = populated_collection.get_balance_by_state(state)
+            assert actual_balance == expected_balance
+            
+    def test_get_balance_by_state_default(self, populated_collection, test_values):
+        """Test getting balance by state with default UNSPENT."""
+        expected_balance = sum(v.value_num for v in test_values if v.state == ValueState.UNSPENT)
+        actual_balance = populated_collection.get_balance_by_state()  # Default UNSPENT
+        assert actual_balance == expected_balance
+        
+    def test_get_total_balance(self, populated_collection, test_values):
+        """Test getting total balance."""
+        expected_total = sum(v.value_num for v in test_values)
+        actual_total = populated_collection.get_total_balance()
+        assert actual_total == expected_total
+        
+    def test_get_balance_empty_collection(self, empty_collection):
+        """Test getting balance from empty collection."""
+        balance = empty_collection.get_balance_by_state()
+        assert balance == 0
+        
+        total_balance = empty_collection.get_total_balance()
+        assert total_balance == 0
+
+
+class TestAccountValueCollectionValidation:
+    """Test suite for validation functionality."""
+    
+    def test_validate_no_overlap_valid(self, empty_collection):
+        """Test validation with no overlapping values."""
+        # Add non-overlapping values
+        values = [
+            Value("0x1000", 100, ValueState.UNSPENT),   # 4096-4195
+            Value("0x2000", 200, ValueState.UNSPENT),   # 8192-8391
+            Value("0x3000", 150, ValueState.UNSPENT),   # 12288-12437
+        ]
+        
+        for value in values:
+            empty_collection.add_value(value)
+            
+        assert empty_collection.validate_no_overlap()
+        
+    def test_validate_no_overlap_invalid(self, empty_collection):
+        """Test validation with overlapping values."""
+        # Add overlapping values
+        values = [
+            Value("0x1000", 200, ValueState.UNSPENT),   # 4096-4295
+            Value("0x1080", 100, ValueState.UNSPENT),   # 4224-4323 (overlaps with first)
+        ]
+        
+        for value in values:
+            empty_collection.add_value(value)
+            
+        assert not empty_collection.validate_no_overlap()
+        
+    def test_validate_no_overlap_empty(self, empty_collection):
+        """Test validation on empty collection."""
+        assert empty_collection.validate_no_overlap()
+        
+    def test_clear_spent_values(self, populated_collection, test_values):
+        """Test clearing spent (CONFIRMED) values."""
+        initial_size = len(populated_collection)
+        
+        populated_collection.clear_spent_values()
+        
+        # Check that CONFIRMED values are removed
+        remaining_values = populated_collection.get_all_values()
+        for value in remaining_values:
+            assert value.state != ValueState.CONFIRMED
+            
+        # Check that other states remain
+        expected_remaining = [v for v in test_values if v.state != ValueState.CONFIRMED]
+        assert len(remaining_values) == len(expected_remaining)
+
+
+class TestAccountValueCollectionEdgeCases:
+    """Test suite for edge cases and error handling."""
+    
+    def test_single_value_operations(self, empty_collection):
+        """Test operations with single value."""
+        value = Value("0x1000", 100, ValueState.UNSPENT)
+        empty_collection.add_value(value)
+        
+        # Test length
+        assert len(empty_collection) == 1
+        
+        # Test contains
+        assert value in empty_collection
+        
+        # Test removal
+        node_id = list(empty_collection._index_map.keys())[0]
+        result = empty_collection.remove_value(node_id)
+        assert result is True
+        assert len(empty_collection) == 0
+        
+    def test_large_number_of_values(self, empty_collection):
+        """Test with large number of values."""
+        num_values = 1000
+        values = []
+        for i in range(num_values):
+            value = Value(hex(0x1000 + i * 100), 100, ValueState.UNSPENT)
+            values.append(value)
+            empty_collection.add_value(value)
+            
+        assert len(empty_collection) == num_values
+        
+        # Test iteration
+        iterated_values = list(empty_collection)
+        assert len(iterated_values) == num_values
+        
+        # Test state finding
+        unspent_values = empty_collection.find_by_state(ValueState.UNSPENT)
+        assert len(unspent_values) == num_values
+        
+    def test_value_with_same_begin_index(self, empty_collection):
+        """Test handling values with same begin index."""
+        value1 = Value("0x1000", 100, ValueState.UNSPENT)
+        value2 = Value("0x1000", 200, ValueState.UNSPENT)  # Same begin index
+        
+        empty_collection.add_value(value1)
+        empty_collection.add_value(value2)
+        
+        assert len(empty_collection) == 2
+        
+        # Test that both values are present
+        all_values = empty_collection.get_all_values()
+        assert value1 in all_values
+        assert value2 in all_values
+        
+    def test_consecutive_values(self, empty_collection):
+        """Test handling consecutive values."""
+        value1 = Value("0x1000", 100, ValueState.UNSPENT)   # 4096-4195
+        value2 = Value("0x10C4", 100, ValueState.UNSPENT)   # 4196-4295 (consecutive)
+        
+        empty_collection.add_value(value1)
+        empty_collection.add_value(value2)
+        
+        assert len(empty_collection) == 2
+        
+        # Test validation - consecutive values should not overlap
+        assert empty_collection.validate_no_overlap()
+        
+    def test_extreme_value_ranges(self, empty_collection):
+        """Test with extreme value ranges."""
+        # Very small values
+        small_value = Value("0x1", 1, ValueState.UNSPENT)
+        empty_collection.add_value(small_value)
+        
+        # Very large values
+        large_value = Value("0xffff0000", 1000, ValueState.UNSPENT)
+        empty_collection.add_value(large_value)
+        
+        assert len(empty_collection) == 2
+        assert empty_collection.validate_no_overlap()
+        
+    def test_state_index_consistency(self, populated_collection):
+        """Test that state index remains consistent."""
+        # Get initial state counts
+        initial_state_counts = {}
+        for state in ValueState:
+            initial_state_counts[state] = len(populated_collection._state_index[state])
+            
+        # Update some values' states
+        node_ids = list(populated_collection._index_map.keys())
+        for i, node_id in enumerate(node_ids[:2]):  # Update first 2 values
+            new_state = list(ValueState)[(i + 1) % len(ValueState)]
+            populated_collection.update_value_state(node_id, new_state)
+            
+        # Check state index consistency
+        for state in ValueState:
+            indexed_values = populated_collection.find_by_state(state)
+            assert len(indexed_values) == len(populated_collection._state_index[state])
+            
+            # All indexed values should have the correct state
+            for value in indexed_values:
+                assert value.state == state
+
+
+class TestValueNode:
+    """Test suite for ValueNode class."""
+    
+    def test_value_node_initialization(self, test_values):
         """Test ValueNode initialization."""
-        node = ValueNode(self.test_value)
-        
-        self.assertEqual(node.value, self.test_value)
-        self.assertIsNotNone(node.node_id)
-        self.assertIsInstance(node.node_id, str)
-        self.assertIsNone(node.next)
-        self.assertIsNone(node.prev)
-        
-    def test_value_node_custom_id(self):
-        """Test ValueNode with custom node ID."""
-        custom_id = "custom_node_123"
-        node = ValueNode(self.test_value, custom_id)
-        
-        self.assertEqual(node.node_id, custom_id)
-        
-    def test_value_node_initialization_with_value_properties(self):
-        """Test ValueNode with different value properties."""
-        value = Value("0x2000", 200, ValueState.LOCAL_COMMITTED)
+        value = test_values[0]
         node = ValueNode(value)
         
-        self.assertEqual(node.value.begin_index, "0x2000")
-        self.assertEqual(node.value.value_num, 200)
-        self.assertEqual(node.value.state, ValueState.LOCAL_COMMITTED)
-
-
-class TestAccountValueCollectionInitialization(unittest.TestCase):
-    """Test suite for AccountValueCollection class initialization."""
-    
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.account_address = "0xTestAccount123"
-        self.collection = AccountValueCollection(self.account_address)
-        
-    def test_account_value_collection_initialization(self):
-        """Test AccountValueCollection initialization."""
-        self.assertEqual(self.collection.account_address, self.account_address)
-        self.assertIsNone(self.collection.head)
-        self.assertIsNone(self.collection.tail)
-        self.assertEqual(self.collection.size, 0)
-        self.assertEqual(len(self.collection._index_map), 0)
-        self.assertEqual(len(self.collection._state_index), 0)
-        self.assertEqual(len(self.collection._decimal_begin_map), 0)
-        
-    def test_account_value_collection_empty_properties(self):
-        """Test empty collection properties."""
-        self.assertEqual(len(self.collection), 0)
-        self.assertEqual(list(self.collection), [])
-        self.assertFalse(Value("0x1000", 100) in self.collection)
-
-
-class TestAccountValueCollectionAddition(unittest.TestCase):
-    """Test suite for AccountValueCollection addition functionality."""
-    
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.collection = AccountValueCollection("0xTestAccount")
-        self.test_values = [
-            Value("0x1000", 100),
-            Value("0x2000", 200),
-            Value("0x3000", 300)
-        ]
-        
-    def test_add_value_end_position(self):
-        """Test adding value at end position."""
-        value = self.test_values[0]
-        result = self.collection.add_value(value, "end")
-        
-        self.assertTrue(result)
-        self.assertEqual(self.collection.size, 1)
-        self.assertIsNotNone(self.collection.head)
-        self.assertIsNotNone(self.collection.tail)
-        self.assertEqual(self.collection.head.value, value)
-        self.assertEqual(self.collection.tail.value, value)
-        self.assertEqual(len(self.collection._index_map), 1)
-        self.assertEqual(len(self.collection._state_index[ValueState.UNSPENT]), 1)
-        self.assertEqual(self.collection._decimal_begin_map[4096], self.collection.head.node_id)  # 0x1000 = 4096
-        
-    def test_add_value_beginning_position(self):
-        """Test adding value at beginning position."""
-        value = self.test_values[0]
-        result = self.collection.add_value(value, "beginning")
-        
-        self.assertTrue(result)
-        self.assertEqual(self.collection.size, 1)
-        self.assertIsNotNone(self.collection.head)
-        self.assertIsNotNone(self.collection.tail)
-        self.assertEqual(self.collection.head.value, value)
-        self.assertEqual(self.collection.tail.value, value)
-        
-    def test_add_multiple_values(self):
-        """Test adding multiple values."""
-        for value in self.test_values:
-            self.collection.add_value(value, "end")
-            
-        self.assertEqual(self.collection.size, 3)
-        self.assertIsNotNone(self.collection.head)
-        self.assertIsNotNone(self.collection.tail)
-        
-        # Verify linked list structure
-        current = self.collection.head
-        for expected_value in self.test_values:
-            self.assertEqual(current.value, expected_value)
-            current = current.next
-            
-        # Verify tail
-        self.assertEqual(self.collection.tail.value, self.test_values[-1])
-        
-    def test_add_values_different_states(self):
-        """Test adding values with different states."""
-        values_with_states = [
-            Value("0x1000", 100, ValueState.UNSPENT),
-            Value("0x2000", 200, ValueState.LOCAL_COMMITTED),
-            Value("0x3000", 300, ValueState.CONFIRMED)
-        ]
-        
-        for value in values_with_states:
-            self.collection.add_value(value, "end")
-            
-        self.assertEqual(self.collection.size, 3)
-        
-        # Verify state indexing
-        self.assertEqual(len(self.collection._state_index[ValueState.UNSPENT]), 1)
-        self.assertEqual(len(self.collection._state_index[ValueState.LOCAL_COMMITTED]), 1)
-        self.assertEqual(len(self.collection._state_index[ValueState.CONFIRMED]), 1)
-        
-    def test_add_value_invalid_position(self):
-        """Test adding value with invalid position."""
-        value = Value("0x1000", 100)
-        
-        with self.assertRaises(ValueError) as context:
-            self.collection.add_value(value, "invalid_position")
-            
-        self.assertIn("position must be", str(context.exception))
-        
-    def test_decimal_begin_index_mapping(self):
-        """Test decimal begin index mapping."""
-        value = Value("0x1000", 100)  # 4096 in decimal
-        self.collection.add_value(value, "end")
-        
-        # Verify decimal begin index mapping
-        self.assertIn(4096, self.collection._decimal_begin_map)
-        self.assertEqual(self.collection._decimal_begin_map[4096], self.collection.head.node_id)
-
-
-class TestAccountValueCollectionRemoval(unittest.TestCase):
-    """Test suite for AccountValueCollection removal functionality."""
-    
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.collection = AccountValueCollection("0xTestAccount")
-        self.test_values = [Value("0x1000", 100), Value("0x2000", 200), Value("0x3000", 300)]
-        
-        # Add all values
-        for value in self.test_values:
-            self.collection.add_value(value, "end")
-            
-    def test_remove_value_head(self):
-        """Test removing head node."""
-        node_id = self.collection.head.node_id
-        result = self.collection.remove_value(node_id)
-        
-        self.assertTrue(result)
-        self.assertEqual(self.collection.size, 2)
-        self.assertEqual(self.collection.head.value, self.test_values[1])
-        self.assertEqual(self.collection.head.prev, None)
-        self.assertEqual(self.collection.head.next.value, self.test_values[2])
-        self.assertEqual(self.collection.tail.value, self.test_values[2])
-        
-        # Verify indexes are updated
-        self.assertNotIn(node_id, self.collection._index_map)
-        self.assertNotIn(4096, self.collection._decimal_begin_map)
-        
-    def test_remove_value_tail(self):
-        """Test removing tail node."""
-        node_id = self.collection.tail.node_id
-        result = self.collection.remove_value(node_id)
-        
-        self.assertTrue(result)
-        self.assertEqual(self.collection.size, 2)
-        self.assertEqual(self.collection.tail.value, self.test_values[1])
-        self.assertEqual(self.collection.tail.next, None)
-        self.assertEqual(self.collection.head.value, self.test_values[0])
-        
-    def test_remove_value_middle(self):
-        """Test removing middle node."""
-        node_id = self.collection.head.next.node_id
-        result = self.collection.remove_value(node_id)
-        
-        self.assertTrue(result)
-        self.assertEqual(self.collection.size, 2)
-        
-        # Verify linked list connections
-        self.assertEqual(self.collection.head.next.value, self.test_values[2])
-        self.assertEqual(self.collection.tail.prev.value, self.test_values[0])
-        
-    def test_remove_nonexistent_value(self):
-        """Test removing nonexistent value."""
-        result = self.collection.remove_value("nonexistent_id")
-        self.assertFalse(result)
-        self.assertEqual(self.collection.size, 3)  # Size should not change
-        
-    def test_remove_value_state_indexing(self):
-        """Test that state indexing is updated when removing value."""
-        # Add a value with specific state
-        value = Value("0x4000", 100, ValueState.LOCAL_COMMITTED)
-        self.collection.add_value(value, "end")
-        
-        # Get its node ID
-        node_id = None
-        for nid, node in self.collection._index_map.items():
-            if node.value == value:
-                node_id = nid
-                break
-                
-        self.assertIsNotNone(node_id)
-        
-        # Remove it
-        result = self.collection.remove_value(node_id)
-        self.assertTrue(result)
-        
-        # Verify state index is updated
-        self.assertNotIn(node_id, self.collection._state_index[ValueState.LOCAL_COMMITTED])
-        
-    def test_remove_all_values(self):
-        """Test removing all values."""
-        # Remove all values one by one
-        current = self.collection.head
-        while current:
-            node_id = current.node_id
-            current = current.next
-            self.collection.remove_value(node_id)
-            
-        self.assertEqual(self.collection.size, 0)
-        self.assertIsNone(self.collection.head)
-        self.assertIsNone(self.collection.tail)
-        self.assertEqual(len(self.collection._index_map), 0)
-        self.assertEqual(len(self.collection._state_index), 0)
-        self.assertEqual(len(self.collection._decimal_begin_map), 0)
-
-
-class TestAccountValueCollectionFinding(unittest.TestCase):
-    """Test suite for AccountValueCollection finding functionality."""
-    
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.collection = AccountValueCollection("0xTestAccount")
-        self.test_values = [
-            Value("0x1000", 100, ValueState.UNSPENT),
-            Value("0x2000", 200, ValueState.LOCAL_COMMITTED),
-            Value("0x3000", 300, ValueState.CONFIRMED),
-            Value("0x4000", 150, ValueState.UNSPENT)
-        ]
-        
-        # Add all values
-        for value in self.test_values:
-            self.collection.add_value(value, "end")
-            
-    def test_find_by_state_unspent(self):
-        """Test finding values by UNSPENT state."""
-        unspent_values = self.collection.find_by_state(ValueState.UNSPENT)
-        
-        self.assertEqual(len(unspent_values), 2)
-        self.assertTrue(all(v.state == ValueState.UNSPENT for v in unspent_values))
-        
-    def test_find_by_state_local_committed(self):
-        """Test finding values by LOCAL_COMMITTED state."""
-        committed_values = self.collection.find_by_state(ValueState.LOCAL_COMMITTED)
-        
-        self.assertEqual(len(committed_values), 1)
-        self.assertEqual(committed_values[0].state, ValueState.LOCAL_COMMITTED)
-        
-    def test_find_by_state_confirmed(self):
-        """Test finding values by CONFIRMED state."""
-        confirmed_values = self.collection.find_by_state(ValueState.CONFIRMED)
-        
-        self.assertEqual(len(confirmed_values), 1)
-        self.assertEqual(confirmed_values[0].state, ValueState.CONFIRMED)
-        
-    def test_find_by_state_no_results(self):
-        """Test finding values by state with no results."""
-        non_existent_state = ValueState.UNSPENT  # All states already tested
-        if len(self.collection._state_index.get(non_existent_state, set())) == 0:
-            values = self.collection.find_by_state(non_existent_state)
-            self.assertEqual(len(values), 0)
-            
-    def test_find_by_range(self):
-        """Test finding values by decimal range."""
-        # Test range that should include values from 0x2000 to 0x3000
-        start_decimal = 8192  # 0x2000
-        end_decimal = 12287   # 0x2fff
-        
-        range_values = self.collection.find_by_range(start_decimal, end_decimal)
-        
-        self.assertEqual(len(range_values), 2)  # Should include Value("0x2000", 200) and Value("0x3000", 300)
-        
-    def test_find_by_range_no_overlap(self):
-        """Test finding values by range with no overlap."""
-        start_decimal = 20000
-        end_decimal = 21000
-        
-        range_values = self.collection.find_by_range(start_decimal, end_decimal)
-        self.assertEqual(len(range_values), 0)
-        
-    def test_find_by_range_partial_overlap(self):
-        """Test finding values by range with partial overlap."""
-        # Value("0x1000", 100) = 4096-4195, Value("0x2000", 200) = 8192-8391
-        # Range 4000-8500 should partially overlap both
-        start_decimal = 4000
-        end_decimal = 8500
-        
-        range_values = self.collection.find_by_range(start_decimal, end_decimal)
-        
-        # Should find both values due to partial overlap
-        self.assertGreaterEqual(len(range_values), 1)
-        
-    def test_find_intersecting_values(self):
-        """Test finding intersecting values."""
-        # Create a value that intersects with existing values
-        intersecting_value = Value("0x1500", 1000)  # Should intersect with Value("0x1000", 100) and Value("0x2000", 200)
-        
-        intersecting_values = self.collection.find_intersecting_values(intersecting_value)
-        
-        # Should find at least one intersecting value
-        self.assertGreater(len(intersecting_values), 0)
-        self.assertTrue(any(v.is_intersect_value(intersecting_value) for v in intersecting_values))
-
-
-class TestAccountValueCollectionSplitting(unittest.TestCase):
-    """Test suite for AccountValueCollection splitting functionality."""
-    
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.collection = AccountValueCollection("0xTestAccount")
-        self.original_value = Value("0x1000", 200)
-        self.collection.add_value(self.original_value, "end")
-        
-    def test_split_value_valid(self):
-        """Test valid value splitting."""
-        change_amount = 50
-        v1, v2 = self.collection.split_value(self.collection.head.node_id, change_amount)
-        
-        self.assertIsNotNone(v1)
-        self.assertIsNotNone(v2)
-        self.assertEqual(v1.value_num, 150)  # 200 - 50
-        self.assertEqual(v2.value_num, 50)
-        self.assertEqual(v1.begin_index, "0x1000")
-        self.assertEqual(v2.begin_index, "0x1096")  # v1.end_index + 1
-        
-        # Verify collection state
-        self.assertEqual(self.collection.size, 2)
-        self.assertIsNotNone(self.collection.head.next)
-        self.assertEqual(self.collection.tail.value, v2)
-        
-        # Verify indexes
-        self.assertEqual(len(self.collection._index_map), 2)
-        self.assertEqual(len(self.collection._state_index[ValueState.UNSPENT]), 2)
-        
-    def test_split_value_invalid_amount(self):
-        """Test splitting value with invalid amount."""
-        # Test with zero change
-        with self.assertRaises(ValueError):
-            v1, v2 = self.collection.split_value(self.collection.head.node_id, 0)
-            
-        # Test with full amount
-        with self.assertRaises(ValueError):
-            v1, v2 = self.collection.split_value(self.collection.head.node_id, 200)
-            
-        # Test with negative amount
-        with self.assertRaises(ValueError):
-            v1, v2 = self.collection.split_value(self.collection.head.node_id, -10)
-            
-    def test_split_nonexistent_value(self):
-        """Test splitting nonexistent value."""
-        v1, v2 = self.collection.split_value("nonexistent_id", 50)
-        self.assertIsNone(v1)
-        self.assertIsNone(v2)
-        
-    def test_split_value_update_indexes(self):
-        """Test that indexes are properly updated after splitting."""
-        change_amount = 50
-        v1, v2 = self.collection.split_value(self.collection.head.node_id, change_amount)
-        
-        # Verify decimal begin index map is updated
-        self.assertIn(4096, self.collection._decimal_begin_map)  # v1's begin index
-        self.assertIn(4240, self.collection._decimal_begin_map)  # v2's begin index (0x1096 = 4240)
-        
-    def test_split_multiple_times(self):
-        """Test splitting value multiple times."""
-        # First split
-        v1, v2 = self.collection.split_value(self.collection.head.node_id, 50)
-        
-        # Split the second part
-        v2a, v2b = self.collection.split_value(self.collection.tail.node_id, 25)
-        
-        self.assertEqual(v2a.value_num, 25)
-        self.assertEqual(v2b.value_num, 25)
-        self.assertEqual(self.collection.size, 3)
-
-
-class TestAccountValueCollectionMerging(unittest.TestCase):
-    """Test suite for AccountValueCollection merging functionality."""
-    
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.collection = AccountValueCollection("0xTestAccount")
-        
-    def test_merge_adjacent_values_valid(self):
-        """Test merging adjacent values."""
-        # Add two adjacent values with same state
-        value1 = Value("0x1000", 100)  # 0x1000 to 0x1063
-        value2 = Value("0x1064", 100)  # 0x1064 to 0x10c7 (adjacent to value1)
-        
-        self.collection.add_value(value1, "end")
-        node_id1 = self.collection.head.node_id
-        self.collection.add_value(value2, "end")
-        node_id2 = self.collection.tail.node_id
-        
-        # Verify they are adjacent in the linked list
-        self.assertEqual(self.collection.head.next.node_id, node_id2)
-        
-        # Merge them
-        merged_value = self.collection.merge_adjacent_values(node_id1, node_id2)
-        
-        self.assertIsNotNone(merged_value)
-        self.assertEqual(merged_value.begin_index, "0x1000")
-        self.assertEqual(merged_value.value_num, 200)  # 100 + 100
-        self.assertEqual(merged_value.end_index, "0x10c7")
-        
-        # Verify collection state
-        self.assertEqual(self.collection.size, 1)
-        self.assertEqual(self.collection.head.value, merged_value)
-        self.assertEqual(len(self.collection._index_map), 1)
-        
-    def test_merge_non_adjacent_values(self):
-        """Test merging non-adjacent values."""
-        # Add non-adjacent values
-        value1 = Value("0x1000", 100)
-        value2 = Value("0x2000", 100)
-        
-        self.collection.add_value(value1, "end")
-        node_id1 = self.collection.head.node_id
-        self.collection.add_value(value2, "end")
-        node_id2 = self.collection.tail.node_id
-        
-        # Merge should fail
-        merged_value = self.collection.merge_adjacent_values(node_id1, node_id2)
-        self.assertIsNone(merged_value)
-        
-        # Collection should remain unchanged
-        self.assertEqual(self.collection.size, 2)
-        
-    def test_merge_different_states(self):
-        """Test merging values with different states."""
-        # Add values with different states
-        value1 = Value("0x1000", 100, ValueState.UNSPENT)
-        value2 = Value("0x1064", 100, ValueState.LOCAL_COMMITTED)
-        
-        self.collection.add_value(value1, "end")
-        node_id1 = self.collection.head.node_id
-        self.collection.add_value(value2, "end")
-        node_id2 = self.collection.tail.node_id
-        
-        # Merge should fail due to different states
-        merged_value = self.collection.merge_adjacent_values(node_id1, node_id2)
-        self.assertIsNone(merged_value)
-        
-    def test_merge_nonexistent_nodes(self):
-        """Test merging nonexistent nodes."""
-        result = self.collection.merge_adjacent_values("nonexistent1", "nonexistent2")
-        self.assertIsNone(result)
-
-
-class TestAccountValueCollectionStateManagement(unittest.TestCase):
-    """Test suite for AccountValueCollection state management functionality."""
-    
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.collection = AccountValueCollection("0xTestAccount")
-        self.test_values = [Value("0x1000", 100), Value("0x2000", 200)]
-        
-        # Add all values
-        for value in self.test_values:
-            self.collection.add_value(value, "end")
-            
-    def test_update_value_state(self):
-        """Test updating value state."""
-        node_id = self.collection.head.node_id
-        
-        # Update to LOCAL_COMMITTED
-        result = self.collection.update_value_state(node_id, ValueState.LOCAL_COMMITTED)
-        self.assertTrue(result)
-        
-        # Verify state change
-        updated_value = self.collection._index_map[node_id].value
-        self.assertEqual(updated_value.state, ValueState.LOCAL_COMMITTED)
-        
-        # Verify state index update
-        self.assertNotIn(node_id, self.collection._state_index[ValueState.UNSPENT])
-        self.assertIn(node_id, self.collection._state_index[ValueState.LOCAL_COMMITTED])
-        
-    def test_update_same_state(self):
-        """Test updating value to same state."""
-        node_id = self.collection.head.node_id
-        
-        # Update to same state
-        result = self.collection.update_value_state(node_id, ValueState.UNSPENT)
-        self.assertTrue(result)
-        
-        # State should remain unchanged
-        self.assertEqual(self.collection._index_map[node_id].value.state, ValueState.UNSPENT)
-        
-    def test_update_nonexistent_value(self):
-        """Test updating nonexistent value state."""
-        result = self.collection.update_value_state("nonexistent_id", ValueState.LOCAL_COMMITTED)
-        self.assertFalse(result)
-        
-    def test_state_index_consistency(self):
-        """Test that state index remains consistent."""
-        # Update all values to LOCAL_COMMITTED
-        for node_id in list(self.collection._index_map.keys()):
-            self.collection.update_value_state(node_id, ValueState.LOCAL_COMMITTED)
-            
-        # Verify state index
-        self.assertEqual(len(self.collection._state_index[ValueState.UNSPENT]), 0)
-        self.assertEqual(len(self.collection._state_index[ValueState.LOCAL_COMMITTED]), 2)
-        self.assertEqual(len(self.collection._state_index[ValueState.CONFIRMED]), 0)
-
-
-class TestAccountValueCollectionBalanceCalculation(unittest.TestCase):
-    """Test suite for AccountValueCollection balance calculation functionality."""
-    
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.collection = AccountValueCollection("0xTestAccount")
-        
-    def test_get_balance_by_state_unspent(self):
-        """Test getting balance by UNSPENT state."""
-        values = [Value("0x1000", 100, ValueState.UNSPENT), Value("0x2000", 200, ValueState.UNSPENT)]
-        
-        for value in values:
-            self.collection.add_value(value, "end")
-            
-        balance = self.collection.get_balance_by_state(ValueState.UNSPENT)
-        self.assertEqual(balance, 300)  # 100 + 200
-        
-    def test_get_balance_by_state_other_states(self):
-        """Test getting balance by other states."""
-        values = [
-            Value("0x1000", 100, ValueState.LOCAL_COMMITTED),
-            Value("0x2000", 200, ValueState.CONFIRMED)
-        ]
-        
-        for value in values:
-            self.collection.add_value(value, "end")
-            
-        local_committed_balance = self.collection.get_balance_by_state(ValueState.LOCAL_COMMITTED)
-        confirmed_balance = self.collection.get_balance_by_state(ValueState.CONFIRMED)
-        
-        self.assertEqual(local_committed_balance, 100)
-        self.assertEqual(confirmed_balance, 200)
-        
-    def test_get_balance_by_state_no_values(self):
-        """Test getting balance by state with no values."""
-        balance = self.collection.get_balance_by_state(ValueState.UNSPENT)
-        self.assertEqual(balance, 0)
-        
-    def test_get_total_balance(self):
-        """Test getting total balance."""
-        values = [Value("0x1000", 100), Value("0x2000", 200), Value("0x3000", 300)]
-        
-        for value in values:
-            self.collection.add_value(value, "end")
-            
-        total_balance = self.collection.get_total_balance()
-        self.assertEqual(total_balance, 600)  # 100 + 200 + 300
-        
-    def test_get_total_balance_empty(self):
-        """Test getting total balance with empty collection."""
-        total_balance = self.collection.get_total_balance()
-        self.assertEqual(total_balance, 0)
-
-
-class TestAccountValueCollectionIterationAndContains(unittest.TestCase):
-    """Test suite for AccountValueCollection iteration and contains functionality."""
-    
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.collection = AccountValueCollection("0xTestAccount")
-        self.test_values = [Value("0x1000", 100), Value("0x2000", 200), Value("0x3000", 300)]
-        
-        # Add all values
-        for value in self.test_values:
-            self.collection.add_value(value, "end")
-            
-    def test_iteration(self):
-        """Test collection iteration."""
-        iterated_values = list(self.collection)
-        
-        self.assertEqual(len(iterated_values), 3)
-        self.assertEqual(iterated_values[0], self.test_values[0])
-        self.assertEqual(iterated_values[1], self.test_values[1])
-        self.assertEqual(iterated_values[2], self.test_values[2])
-        
-    def test_contains_existing_value(self):
-        """Test contains method with existing value."""
-        self.assertTrue(self.test_values[0] in self.collection)
-        
-    def test_contains_nonexistent_value(self):
-        """Test contains method with nonexistent value."""
-        nonexistent_value = Value("0x9999", 999)
-        self.assertFalse(nonexistent_value in self.collection)
-        
-    def test_contains_different_values_same_properties(self):
-        """Test contains method with different values that have same properties."""
-        same_value = Value("0x1000", 100)  # Same as test_values[0]
-        self.assertTrue(same_value in self.collection)
-        
-    def test_contains_with_state_mismatch(self):
-        """Test contains method with value that has same properties but different state."""
-        different_state_value = Value("0x1000", 100, ValueState.LOCAL_COMMITTED)
-        # Should still be found if there's a value with same begin_index and value_num
-        # but different state
-        self.assertTrue(different_state_value in self.collection)
-
-
-class TestAccountValueCollectionValidation(unittest.TestCase):
-    """Test suite for AccountValueCollection validation functionality."""
-    
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.collection = AccountValueCollection("0xTestAccount")
-        
-    def test_validate_no_overlap_empty(self):
-        """Test validation with empty collection."""
-        result = self.collection.validate_no_overlap()
-        self.assertTrue(result)
-        
-    def test_validate_no_overlap_valid(self):
-        """Test validation with non-overlapping values."""
-        values = [Value("0x1000", 100), Value("0x2000", 200)]
-        
-        for value in values:
-            self.collection.add_value(value, "end")
-            
-        result = self.collection.validate_no_overlap()
-        self.assertTrue(result)
-        
-    def test_validate_no_overlap_with_overlap(self):
-        """Test validation with overlapping values."""
-        values = [Value("0x1000", 200), Value("0x1500", 100)]  # Overlapping
-        
-        for value in values:
-            self.collection.add_value(value, "end")
-            
-        result = self.collection.validate_no_overlap()
-        self.assertFalse(result)
-        
-    def test_validate_no_adjacent_overlap(self):
-        """Test validation with adjacent but not overlapping values."""
-        values = [Value("0x1000", 100), Value("0x1064", 100)]  # Adjacent but not overlapping
-        
-        for value in values:
-            self.collection.add_value(value, "end")
-            
-        result = self.collection.validate_no_overlap()
-        self.assertTrue(result)  # Adjacent values should not be considered overlapping
-
-
-class TestAccountValueCollectionClearSpent(unittest.TestCase):
-    """Test suite for AccountValueCollection clear spent functionality."""
-    
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.collection = AccountValueCollection("0xTestAccount")
-        
-    def test_clear_spent_values_empty(self):
-        """Test clearing spent values from empty collection."""
-        # Should not raise any exceptions
-        self.collection.clear_spent_values()
-        self.assertEqual(self.collection.size, 0)
-        
-    def test_clear_spent_values_no_confirmed(self):
-        """Test clearing spent values with no confirmed values."""
-        values = [Value("0x1000", 100, ValueState.UNSPENT)]
-        
-        for value in values:
-            self.collection.add_value(value, "end")
-            
-        self.collection.clear_spent_values()
-        
-        # Values should remain unchanged
-        self.assertEqual(self.collection.size, 1)
-        
-    def test_clear_spent_values_with_confirmed(self):
-        """Test clearing spent values with confirmed values."""
-        values = [
-            Value("0x1000", 100, ValueState.UNSPENT),
-            Value("0x2000", 200, ValueState.CONFIRMED),
-            Value("0x3000", 300, ValueState.LOCAL_COMMITTED)
-        ]
-        
-        for value in values:
-            self.collection.add_value(value, "end")
-            
-        # Should only remove CONFIRMED values
-        initial_size = self.collection.size
-        self.collection.clear_spent_values()
-        
-        # Should have removed one CONFIRMED value
-        self.assertEqual(self.collection.size, initial_size - 1)
-        
-    def test_clear_all_confirmed_values(self):
-        """Test clearing all confirmed values."""
-        # Add multiple confirmed values
-        for i in range(3):
-            value = Value(f"0x{i*1000}", 100, ValueState.CONFIRMED)
-            self.collection.add_value(value, "end")
-            
-        self.assertEqual(self.collection.size, 3)
-        
-        # Clear all confirmed values
-        self.collection.clear_spent_values()
-        
-        self.assertEqual(self.collection.size, 0)
-        self.assertEqual(len(self.collection._state_index[ValueState.CONFIRMED]), 0)
-
-
-class TestAccountValueCollectionEdgeCases(unittest.TestCase):
-    """Test suite for AccountValueCollection edge cases."""
-    
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.collection = AccountValueCollection("0xTestAccount")
-        
-    def test_large_number_of_values(self):
-        """Test with large number of values."""
-        values = [Value(f"0x{i}", 1) for i in range(1000)]
-        
-        for value in values:
-            self.collection.add_value(value, "end")
-            
-        self.assertEqual(self.collection.size, 1000)
-        self.assertEqual(self.collection.get_total_balance(), 1000)
-        
-        # Test finding values
-        found_values = self.collection.find_by_state(ValueState.UNSPENT)
-        self.assertEqual(len(found_values), 1000)
-        
-    def test_single_value_operations(self):
-        """Test operations with single value."""
-        value = Value("0x1000", 100)
-        self.collection.add_value(value, "end")
-        
-        # Test all operations
-        self.assertEqual(self.collection.size, 1)
-        self.assertEqual(self.collection.get_total_balance(), 100)
-        self.assertEqual(len(self.collection.find_by_state(ValueState.UNSPENT)), 1)
-        self.assertTrue(value in self.collection)
-        
-        # Test splitting
-        v1, v2 = self.collection.split_value(self.collection.head.node_id, 50)
-        self.assertIsNotNone(v1)
-        self.assertIsNotNone(v2)
-        self.assertEqual(self.collection.size, 2)
-        
-    def test_values_with_large_numbers(self):
-        """Test with large value numbers."""
-        large_value = Value("0x1000000", 1000000)  # Large hex, large number
-        self.collection.add_value(large_value, "end")
-        
-        self.assertEqual(self.collection.size, 1)
-        self.assertEqual(self.collection.get_total_balance(), 1000000)
-        
-        # Test range finding
-        decimal_begin = large_value.get_decimal_begin_index()
-        decimal_end = large_value.get_decimal_end_index()
-        found_values = self.collection.find_by_range(decimal_begin, decimal_end)
-        self.assertEqual(len(found_values), 1)
-        
-    def test_mixed_operations_sequence(self):
-        """Test complex sequence of operations."""
-        # Add multiple values
-        values = [Value("0x1000", 100), Value("0x2000", 200), Value("0x3000", 300)]
-        for value in values:
-            self.collection.add_value(value, "end")
-            
-        # Split one value
-        v1, v2 = self.collection.split_value(self.collection.head.node_id, 50)
-        
-        # Update states
-        self.collection.update_value_state(self.collection.head.node_id, ValueState.LOCAL_COMMITTED)
-        self.collection.update_value_state(self.collection.tail.node_id, ValueState.CONFIRMED)
-        
-        # Check balance
-        unspent_balance = self.collection.get_balance_by_state(ValueState.UNSPENT)
-        committed_balance = self.collection.get_balance_by_state(ValueState.LOCAL_COMMITTED)
-        confirmed_balance = self.collection.get_balance_by_state(ValueState.CONFIRMED)
-        
-        self.assertEqual(unspent_balance, 450)  # 200 + 250 (from split) 
-        self.assertEqual(committed_balance, 50)
-        self.assertEqual(confirmed_balance, 300)
-
-
-if __name__ == '__main__':
-    # Run tests with verbose output
-    unittest.main(verbosity=2)
+        assert node.value == value
+        assert node.next is None
+        assert node.prev is None
+        assert isinstance(node.node_id, str)
+        assert len(node.node_id) > 0
+        
+    def test_value_node_with_custom_id(self, test_values):
+        """Test ValueNode initialization with custom node_id."""
+        value = test_values[0]
+        custom_id = "custom_node_id"
+        node = ValueNode(value, custom_id)
+        
+        assert node.node_id == custom_id
+        
+    def test_value_node_linking(self, test_values):
+        """Test ValueNode linking functionality."""
+        node1 = ValueNode(test_values[0])
+        node2 = ValueNode(test_values[1])
+        
+        # Link nodes
+        node1.next = node2
+        node2.prev = node1
+        
+        assert node1.next == node2
+        assert node2.prev == node1

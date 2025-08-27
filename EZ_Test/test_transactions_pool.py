@@ -16,7 +16,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import serialization
 
 
-class TestMultiTxnsPool(unittest.TestCase):
+class TestTxnsPool(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
@@ -501,6 +501,165 @@ class TestMultiTxnsPool(unittest.TestCase):
         result = self.pool.get_multi_transactions_by_digest(multi_txn2.digest)
         self.assertIsNotNone(result)
         self.assertEqual(result, multi_txn2)
+    
+    def test_load_from_database(self):
+        """Test _load_from_database method directly."""
+        import sqlite3
+        
+        # Add some test data directly to the database
+        with sqlite3.connect(self.temp_db.name) as conn:
+            cursor = conn.cursor()
+            
+            # Insert a valid MultiTransactions directly into database
+            cursor.execute('''
+                INSERT INTO multi_transactions 
+                (digest, sender, timestamp, signature, transactions_blob, is_valid, processed)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                self.multi_txn.digest,
+                self.multi_txn.sender,
+                self.multi_txn.time,
+                self.multi_txn.signature.hex() if self.multi_txn.signature else None,
+                self.multi_txn.encode(),
+                True,
+                False
+            ))
+            
+            # Insert an invalid MultiTransactions
+            invalid_multi_txn = MultiTransactions(
+                sender="invalid_sender",
+                multi_txns=[self.txn1]
+            )
+            invalid_multi_txn.sig_acc_txn(self.private_key_pem)
+            
+            cursor.execute('''
+                INSERT INTO multi_transactions 
+                (digest, sender, timestamp, signature, transactions_blob, is_valid, processed)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                invalid_multi_txn.digest,
+                invalid_multi_txn.sender,
+                invalid_multi_txn.time,
+                invalid_multi_txn.signature.hex() if invalid_multi_txn.signature else None,
+                invalid_multi_txn.encode(),
+                False,
+                False
+            ))
+            
+            # Insert a processed MultiTransactions (should not be loaded)
+            processed_multi_txn = MultiTransactions(
+                sender="processed_sender",
+                multi_txns=[self.txn2]
+            )
+            processed_multi_txn.sig_acc_txn(self.private_key_pem)
+            
+            cursor.execute('''
+                INSERT INTO multi_transactions 
+                (digest, sender, timestamp, signature, transactions_blob, is_valid, processed)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                processed_multi_txn.digest,
+                processed_multi_txn.sender,
+                processed_multi_txn.time,
+                processed_multi_txn.signature.hex() if processed_multi_txn.signature else None,
+                processed_multi_txn.encode(),
+                True,
+                True
+            ))
+            
+            conn.commit()
+        
+        # Clear the current pool
+        self.pool.pool.clear()
+        self.pool.sender_index.clear()
+        self.pool.digest_index.clear()
+        
+        # Call _load_from_database directly
+        self.pool._load_from_database()
+        
+        # Check that only valid and unprocessed transactions were loaded
+        self.assertEqual(len(self.pool.pool), 1)
+        self.assertEqual(len(self.pool.sender_index), 1)
+        self.assertEqual(len(self.pool.digest_index), 1)
+        
+        # Check that the correct transaction was loaded
+        loaded_multi_txn = self.pool.get_multi_transactions_by_digest(self.multi_txn.digest)
+        self.assertIsNotNone(loaded_multi_txn)
+        self.assertEqual(loaded_multi_txn.sender, self.multi_txn.sender)
+        self.assertEqual(loaded_multi_txn.digest, self.multi_txn.digest)
+        
+        # Check that invalid and processed transactions were not loaded
+        invalid_result = self.pool.get_multi_transactions_by_digest(invalid_multi_txn.digest)
+        self.assertIsNone(invalid_result)
+        
+        processed_result = self.pool.get_multi_transactions_by_digest(processed_multi_txn.digest)
+        self.assertIsNone(processed_result)
+        
+        # Check that stats were updated correctly
+        self.assertEqual(self.pool.stats['total_received'], 1)
+        self.assertEqual(self.pool.stats['valid_received'], 1)
+        self.assertEqual(self.pool.stats['invalid_received'], 0)
+    
+    def test_load_from_database_with_corrupted_data(self):
+        """Test _load_from_database with corrupted data."""
+        import sqlite3
+        
+        # Add corrupted data directly to the database
+        with sqlite3.connect(self.temp_db.name) as conn:
+            cursor = conn.cursor()
+            
+            # Insert a valid MultiTransactions first
+            cursor.execute('''
+                INSERT INTO multi_transactions 
+                (digest, sender, timestamp, signature, transactions_blob, is_valid, processed)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                self.multi_txn.digest,
+                self.multi_txn.sender,
+                self.multi_txn.time,
+                self.multi_txn.signature.hex() if self.multi_txn.signature else None,
+                self.multi_txn.encode(),
+                True,
+                False
+            ))
+            
+            # Insert corrupted data (invalid blob)
+            cursor.execute('''
+                INSERT INTO multi_transactions 
+                (digest, sender, timestamp, signature, transactions_blob, is_valid, processed)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                "corrupted_digest",
+                "corrupted_sender",
+                "2023-01-01T00:00:00",
+                None,
+                b"corrupted_blob_data",
+                True,
+                False
+            ))
+            
+            conn.commit()
+        
+        # Clear the current pool
+        self.pool.pool.clear()
+        self.pool.sender_index.clear()
+        self.pool.digest_index.clear()
+        
+        # Call _load_from_database directly - should not crash
+        self.pool._load_from_database()
+        
+        # Check that only the valid transaction was loaded
+        self.assertEqual(len(self.pool.pool), 1)
+        self.assertEqual(len(self.pool.sender_index), 1)
+        self.assertEqual(len(self.pool.digest_index), 1)
+        
+        # Check that the valid transaction was loaded
+        loaded_multi_txn = self.pool.get_multi_transactions_by_digest(self.multi_txn.digest)
+        self.assertIsNotNone(loaded_multi_txn)
+        
+        # Check that corrupted data was not loaded
+        corrupted_result = self.pool.get_multi_transactions_by_digest("corrupted_digest")
+        self.assertIsNone(corrupted_result)
 
 
 if __name__ == '__main__':

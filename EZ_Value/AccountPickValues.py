@@ -131,31 +131,6 @@ class AccountPickValues:
             self._update_value_state(value, ValueState.UNSPENT)
         return True
     
-    # 暂时不需要使用合并功能（EZchain系统暂不提供此功能）
-    def optimize_values(self) -> List[Value]:
-        """优化相邻的Value，合并连续的Value"""
-        values = self.account_collection.get_values_sorted_by_begin_index()
-        merged_values = []
-        
-        for i in range(len(values)):
-            current_value = values[i]
-            merged = False
-            
-            # 检查是否可以与之前的值合并
-            if merged_values and self._are_adjacent(merged_values[-1], current_value):
-                node_id1 = self._find_node_by_value(merged_values[-1])
-                node_id2 = self._find_node_by_value(current_value)
-                if node_id1 and node_id2:
-                    merged_value = self.account_collection.merge_adjacent_values(node_id1, node_id2)
-                    if merged_value:
-                        merged_values[-1] = merged_value
-                        merged = True
-            
-            if not merged:
-                merged_values.append(current_value)
-                
-        return merged_values
-    
     def get_account_balance(self, state: ValueState = ValueState.UNSPENT) -> int:
         """获取账户指定状态的余额"""
         return self.account_collection.get_balance_by_state(state)

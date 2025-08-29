@@ -74,10 +74,10 @@ class AccountPickValues:
                     # 将找零v2状态设置为SELECTED
                     self._update_value_state(v2, ValueState.SELECTED)
                     
-                    # 创建找零交易
+                    # 创建（给sender自己）找零交易
                     change_transaction = Transaction(
                         sender=sender,
-                        recipient=recipient,
+                        recipient=sender,
                         nonce=nonce,
                         signature=None,
                         value=[v2],

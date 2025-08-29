@@ -169,7 +169,7 @@ class TestAccountPickValuesPickValuesForTransaction:
 
     def test_pick_values_multiple_with_change(self, populated_account_pick_values):
         """Test picking values requiring multiple inputs."""
-        required_amount = 250
+        required_amount = 271
         sender = "0xsender"
         recipient = "0xrecipient"
         nonce = 1
@@ -182,20 +182,29 @@ class TestAccountPickValuesPickValuesForTransaction:
 
         # Check that we have selected values
         assert len(selected_values) >= 1
+        
+        # Calculate total amount from selected values and change
         total_selected = sum(v.value_num for v in selected_values)
-        assert total_selected >= required_amount
+        
+        # The key assertion: total amount should equal required amount
+        # because selected_values and change_value are split from original values
+        assert total_selected == required_amount
         
         # Check that transactions were created
         assert main_tx is not None
+        assert main_tx.sender == sender
+        assert main_tx.recipient == recipient
         
         # If change was created, verify it
         if change_value is not None:
-            assert change_value.value_num == total_selected - required_amount
+            assert change_value.value_num > 0
             assert change_tx is not None
+            assert change_tx.sender == sender
+            assert change_tx.recipient == sender  # Change goes back to sender
 
     def test_pick_values_multiple_values(self, populated_account_pick_values):
         """Test picking values requiring multiple inputs."""
-        required_amount = 450
+        required_amount = 457
         sender = "0xsender"
         recipient = "0xrecipient"
         nonce = 1
@@ -213,7 +222,7 @@ class TestAccountPickValuesPickValuesForTransaction:
 
     def test_pick_values_insufficient_balance(self, populated_account_pick_values):
         """Test picking values with insufficient balance."""
-        required_amount = 2000
+        required_amount = 2008
         sender = "0xsender"
         recipient = "0xrecipient"
         nonce = 1

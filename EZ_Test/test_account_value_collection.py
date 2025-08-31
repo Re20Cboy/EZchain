@@ -738,3 +738,29 @@ class TestValueNode:
         
         assert node1.next == node2
         assert node2.prev == node1
+
+
+# Global test values for the test
+global_test_values = [
+    Value("0x1000", 100, ValueState.UNSPENT),
+    Value("0x2000", 200, ValueState.SELECTED),
+    Value("0x3000", 150, ValueState.LOCAL_COMMITTED),
+    Value("0x4000", 300, ValueState.CONFIRMED),
+    Value("0x5000", 250, ValueState.UNSPENT)
+]
+
+
+def main():
+    """Simple entry function to run tests."""
+    print("Running AccountValueCollection tests...")
+    print("To run all tests, use: pytest -v")
+    print("To run specific test class, use: pytest -v test_account_value_collection.py::TestAccountValueCollectionInitialization")
+    print("To run with coverage, use: pytest --cov=.")
+    
+    # Run pytest programmatically
+    exit_code = pytest.main([__file__, "-v"])
+    return exit_code
+
+
+if __name__ == "__main__":
+    exit(main())

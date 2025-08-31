@@ -440,3 +440,18 @@ class TestValueErrorHandling:
             
         with pytest.raises(TypeError):
             Value("0x1000", 100, "invalid_state")  # state should be ValueState
+
+def main():
+    """Simple entry function to run tests."""
+    print("Running Test_value tests...")
+    print("To run all tests, use: pytest -v")
+    print("To run specific test class, use: pytest -v test_value.py::TestValue")
+    print("To run with coverage, use: pytest --cov=.")
+    
+    # Run pytest programmatically
+    exit_code = pytest.main([__file__, "-v"])
+    return exit_code
+
+
+if __name__ == "__main__":
+    exit(main())

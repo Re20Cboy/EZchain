@@ -127,3 +127,12 @@ class Value:  # 针对VCB区块链的专门设计的值结构，总量2^259 = 16
             print('ERR: func isSameValue get illegal input!')
             return False
         return target.begin_index == self.begin_index and target.end_index == self.end_index and target.value_num == self.value_num
+    
+    def to_dict(self) -> dict:
+        """Convert Value to dictionary for deterministic serialization."""
+        return {
+            "begin_index": self.begin_index,
+            "end_index": self.end_index,
+            "value_num": self.value_num,
+            "state": self.state.value
+        }

@@ -5,7 +5,7 @@ from typing import List, Any, Optional
 
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_pem_public_key
+from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from cryptography.exceptions import InvalidSignature
 
 import sys
@@ -15,6 +15,7 @@ import os
 sys.path.insert(0, os.path.dirname(__file__) + '/..')
 
 from EZ_Tool_Box.Hash import sha256_hash
+from EZ_Tool_Box.SecureSignature import secure_signature_handler
 from .SingleTransaction import Transaction
 
 class MultiTransactions:
@@ -87,7 +88,7 @@ class MultiTransactions:
 
     def sig_acc_txn(self, load_private_key: bytes) -> None:
         """
-        Sign the multi-transaction with the provided private key.
+        Sign the multi-transaction with the provided private key using secure signature handler.
         
         Args:
             load_private_key: Private key in PEM format for signing
@@ -95,21 +96,40 @@ class MultiTransactions:
         # Check if multi_txns is empty
         if not self.multi_txns:
             raise ValueError("Cannot sign empty transaction list")
-            
-        private_key = load_pem_private_key(load_private_key, password=None)
         
-        # Calculate digest once and reuse
-        digest = sha256_hash(self.encode())
-        digest_bytes = digest.encode('utf-8')
-        self.digest = digest
+        # Prepare multi-transaction data for signing
+        multi_transaction_data = {
+            "sender": self.sender,
+            "time": self.time,
+            "transactions": [
+                {
+                    "sender": txn.sender,
+                    "recipient": txn.recipient,
+                    "nonce": txn.nonce,
+                    "timestamp": txn.time,
+                    "value": txn._serialize_values() if hasattr(txn, '_serialize_values') else []
+                }
+                for txn in self.multi_txns
+            ]
+        }
         
-        # Sign the digest
-        signature = private_key.sign(data=digest_bytes, signature_algorithm=self.SIGNATURE_ALGORITHM)
-        self.signature = signature
+        # Use secure signature handler for multi-transaction signing
+        signature_result = secure_signature_handler.sign_transaction(
+            sender=self.sender,
+            recipient="multi_transaction",  # Special recipient for multi-transactions
+            nonce=len(self.multi_txns),  # Use transaction count as nonce
+            value_data=multi_transaction_data["transactions"],
+            private_key_pem=load_private_key,
+            timestamp=self.time
+        )
+        
+        # Set the signature and digest from the secure handler result
+        self.signature = bytes.fromhex(signature_result["signature"])
+        self.digest = signature_result["transaction_hash"]
 
     def check_acc_txn_sig(self, load_public_key: bytes) -> bool:
         """
-        Verify the multi-transaction signature with the provided public key.
+        Verify the multi-transaction signature with the provided public key using secure signature handler.
         
         Args:
             load_public_key: Public key in PEM format for verification
@@ -119,19 +139,29 @@ class MultiTransactions:
         """
         if self.signature is None or self.digest is None:
             return False
-            
-        public_key = load_pem_public_key(load_public_key)
-        signature_algorithm = self.SIGNATURE_ALGORITHM
         
-        try:
-            public_key.verify(
-                self.signature,
-                self.digest.encode('utf-8'),
-                signature_algorithm
-            )
-            return True
-        except InvalidSignature:
-            return False
+        # Prepare multi-transaction data for verification
+        multi_transaction_data = {
+            "sender": self.sender,
+            "time": self.time,
+            "transactions": [
+                {
+                    "sender": txn.sender,
+                    "recipient": txn.recipient,
+                    "nonce": txn.nonce,
+                    "timestamp": txn.time,
+                    "value": txn._serialize_values() if hasattr(txn, '_serialize_values') else []
+                }
+                for txn in self.multi_txns
+            ]
+        }
+        
+        # Use secure signature handler for verification
+        return secure_signature_handler.verify_transaction_signature(
+            transaction_data=multi_transaction_data,
+            signature_hex=self.signature.hex(),
+            public_key_pem=load_public_key
+        )
     
     def __len__(self) -> int:
         """

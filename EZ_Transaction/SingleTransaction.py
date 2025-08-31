@@ -6,13 +6,14 @@ import sys
 import os
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_pem_public_key
+from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from cryptography.exceptions import InvalidSignature
 
 # Add the project root to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from EZ_Tool_Box.Hash import sha256_hash
+from EZ_Tool_Box.SecureSignature import secure_signature_handler
 from EZ_Value import Value
 
 class Transaction:
@@ -26,10 +27,39 @@ class Transaction:
         self.time = time
 
     def _calculate_hash(self) -> bytes:
-        """Calculate hash of the transaction string."""
-        block_hash = hashes.Hash(hashes.SHA256())
-        block_hash.update(self.txn2str().encode('utf-8'))
-        return block_hash.finalize()
+        """Calculate hash of the transaction using deterministic JSON serialization."""
+        import json
+        
+        # Create a deterministic representation for hashing
+        # Exclude signature and tx_hash as they are results of this hash
+        txn_data = {
+            "sender": self.sender,
+            "recipient": self.recipient,
+            "nonce": self.nonce,
+            "time": self.time,
+            "value": self._serialize_values()
+        }
+        
+        # Use sorted keys and ensure consistent serialization
+        txn_json = json.dumps(txn_data, sort_keys=True, separators=(',', ':'))
+        
+        # Calculate SHA256 hash
+        return hashlib.sha256(txn_json.encode('utf-8')).digest()
+    
+    def _serialize_values(self) -> list:
+        """Serialize Value objects for deterministic hashing."""
+        serialized_values = []
+        for value in self.value:
+            # Assuming Value objects have a to_dict() method or similar
+            if hasattr(value, 'to_dict'):
+                serialized_values.append(value.to_dict())
+            else:
+                # Fallback to basic attributes
+                serialized_values.append({
+                    "amount": getattr(value, 'amount', 0),
+                    "type": getattr(value, 'type', 'unknown')
+                })
+        return serialized_values
 
     def txn2str(self):
         txn_str = f"Sender: {self.sender}\n"
@@ -49,33 +79,53 @@ class Transaction:
         print('---------txn end---------')
 
     def sig_txn(self, load_private_key: bytes) -> None:
-        """Sign the transaction with the provided private key."""
-        private_key = load_pem_private_key(load_private_key, password=None)
-        digest = self._calculate_hash()
-        signature_algorithm = ec.ECDSA(hashes.SHA256())
-        self.signature = private_key.sign(data=digest, signature_algorithm=signature_algorithm)
+        """Sign the transaction with the provided private key using secure signature handler."""
+        # Prepare transaction data for signing
+        transaction_data = {
+            "sender": self.sender,
+            "recipient": self.recipient,
+            "nonce": self.nonce,
+            "timestamp": self.time,
+            "value": self._serialize_values()
+        }
+        
+        # Use secure signature handler
+        signature_result = secure_signature_handler.sign_transaction(
+            sender=self.sender,
+            recipient=self.recipient,
+            nonce=self.nonce,
+            value_data=self._serialize_values(),
+            private_key_pem=load_private_key,
+            timestamp=self.time
+        )
+        
+        # Set the signature from the secure handler result
+        self.signature = bytes.fromhex(signature_result["signature"])
 
     def is_sent_to_self(self) -> bool:
         """Check if the transaction is sent to the same sender."""
         return self.sender == self.recipient
 
     def check_txn_sig(self, load_public_key: bytes) -> bool:
-        """Verify the transaction signature with the provided public key."""
+        """Verify the transaction signature with the provided public key using secure signature handler."""
         if self.signature is None:
             return False
         
-        public_key = load_pem_public_key(load_public_key)
-        digest = self._calculate_hash()
-        signature_algorithm = ec.ECDSA(hashes.SHA256())
-        try:
-            public_key.verify(
-                self.signature,
-                digest,
-                signature_algorithm
-            )
-            return True
-        except InvalidSignature:
-            return False
+        # Prepare transaction data for verification
+        transaction_data = {
+            "sender": self.sender,
+            "recipient": self.recipient,
+            "nonce": self.nonce,
+            "timestamp": self.time,
+            "value": self._serialize_values()
+        }
+        
+        # Use secure signature handler for verification
+        return secure_signature_handler.verify_transaction_signature(
+            transaction_data=transaction_data,
+            signature_hex=self.signature.hex(),
+            public_key_pem=load_public_key
+        )
 
     def get_values(self) -> List[Value]:
         """Get the list of values in this transaction."""

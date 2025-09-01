@@ -300,6 +300,105 @@ class SecureTransactionSignature:
         except (KeyError, ValueError, Exception):
             return False
     
+    def sign_multi_transaction(
+        self,
+        sender: str,
+        transactions: list,
+        private_key_pem: bytes,
+        timestamp: Optional[str] = None
+    ) -> dict:
+        """
+        Sign a multi-transaction securely.
+        
+        Args:
+            sender: Sender address
+            transactions: List of transaction dictionaries
+            private_key_pem: Private key in PEM format
+            timestamp: Optional timestamp (auto-generated if not provided)
+            
+        Returns:
+            Dictionary containing multi-transaction data and signature
+        """
+        if self._security_warnings_enabled:
+            warnings.warn(
+                "Private key is being loaded into memory. "
+                "Ensure this is called in a secure environment.",
+                UserWarning
+            )
+        
+        # Create deterministic multi-transaction data for signing
+        import json
+        from datetime import datetime
+        
+        if timestamp is None:
+            timestamp = datetime.now().isoformat()
+        
+        multi_transaction_data = {
+            "sender": sender,
+            "timestamp": timestamp,
+            "transactions": transactions,
+            "type": "multi_transaction"
+        }
+        
+        # Create deterministic JSON representation
+        transaction_json = json.dumps(multi_transaction_data, sort_keys=True, separators=(',', ':'))
+        transaction_bytes = transaction_json.encode('utf-8')
+        
+        # Calculate multi-transaction hash
+        transaction_hash = hashlib.sha256(transaction_bytes).digest()
+        
+        # Sign the multi-transaction hash
+        signature = self.signer.sign_transaction_data(transaction_hash, private_key_pem)
+        
+        return {
+            "multi_transaction_data": multi_transaction_data,
+            "transaction_hash": transaction_hash.hex(),
+            "signature": signature.hex(),
+            "timestamp": timestamp
+        }
+    
+    def verify_multi_transaction_signature(
+        self,
+        multi_transaction_data: dict,
+        signature_hex: str,
+        public_key_pem: bytes
+    ) -> bool:
+        """
+        Verify a multi-transaction signature.
+        
+        Args:
+            multi_transaction_data: Multi-transaction data dictionary
+            signature_hex: Signature in hex format
+            public_key_pem: Public key in PEM format
+            
+        Returns:
+            True if signature is valid, False otherwise
+        """
+        try:
+            # Recreate the multi-transaction hash
+            import json
+            
+            # Create deterministic JSON (exclude signature-related fields)
+            signable_data = {
+                "sender": multi_transaction_data["sender"],
+                "timestamp": multi_transaction_data["timestamp"],
+                "transactions": multi_transaction_data["transactions"],
+                "type": "multi_transaction"
+            }
+            
+            transaction_json = json.dumps(signable_data, sort_keys=True, separators=(',', ':'))
+            transaction_bytes = transaction_json.encode('utf-8')
+            transaction_hash = hashlib.sha256(transaction_bytes).digest()
+            
+            # Convert hex signature to bytes
+            signature = bytes.fromhex(signature_hex)
+            
+            # Verify signature
+            return self.signer.verify_signature(transaction_hash, signature, public_key_pem)
+            
+        except (KeyError, ValueError, Exception):
+            return False
+    
     def disable_security_warnings(self) -> None:
         """Disable security warnings (use with caution)."""
         self._security_warnings_enabled = False

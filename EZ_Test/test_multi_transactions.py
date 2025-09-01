@@ -246,7 +246,7 @@ class TestMultiTransactionsDigest:
 
 
 class TestMultiTransactionsSignature:
-    """Test suite for MultiTransactions signature functionality."""
+    """Test suite for basic MultiTransactions signature functionality."""
     
     @pytest.fixture
     def setup_signature(self):
@@ -291,8 +291,8 @@ class TestMultiTransactionsSignature:
             multi_txns=self.multi_txns
         )
         
-    def test_sign_multi_transaction(self, setup_signature):
-        """Test multi-transaction signing."""
+    def test_basic_sign_multi_transaction(self, setup_signature):
+        """Test basic multi-transaction signing functionality."""
         self.multi_tx.sig_acc_txn(self.private_key_pem)
         
         # Verify signature is set
@@ -300,16 +300,16 @@ class TestMultiTransactionsSignature:
         assert isinstance(self.multi_tx.signature, bytes)
         assert self.multi_tx.digest is not None
         
-    def test_signature_verification(self, setup_signature):
-        """Test signature verification."""
+    def test_basic_signature_verification(self, setup_signature):
+        """Test basic signature verification."""
         # Sign the multi-transaction
         self.multi_tx.sig_acc_txn(self.private_key_pem)
         
         # Verify the signature should be valid
         result = self.multi_tx.check_acc_txn_sig(self.public_key_pem)
-        assert result
+        assert result is True
         
-    def test_signature_verification_wrong_key(self, setup_signature):
+    def test_basic_signature_wrong_key(self, setup_signature):
         """Test signature verification with wrong public key."""
         # Generate a different key
         wrong_private_key = ec.generate_private_key(ec.SECP256R1())
@@ -323,25 +323,13 @@ class TestMultiTransactionsSignature:
         
         # Verify with wrong key should fail
         result = self.multi_tx.check_acc_txn_sig(wrong_public_key_pem)
-        assert not result
+        assert result is False
         
-    def test_unsigned_multi_transaction_verification(self, setup_signature):
+    def test_basic_unsigned_verification(self, setup_signature):
         """Test verification of unsigned multi-transaction."""
         # When signature and digest are None, verification should fail
         result = self.multi_tx.check_acc_txn_sig(self.public_key_pem)
-        assert not result
-        
-    def test_sign_empty_transaction_list(self, setup_signature):
-        """Test signing empty transaction list should raise error."""
-        empty_multi_tx = MultiTransactions(
-            sender=self.sender,
-            multi_txns=[]
-        )
-        
-        with pytest.raises(ValueError) as context:
-            empty_multi_tx.sig_acc_txn(self.private_key_pem)
-            
-        assert "Cannot sign empty transaction list" in str(context.value)
+        assert result is False
 
 
 class TestMultiTransactionsEdgeCases:
@@ -399,7 +387,6 @@ class TestMultiTransactionsEdgeCases:
             nonce=1,
             signature=None,
             value=self.value,
-            tx_hash=None,
             time=None
         )
         
@@ -544,4 +531,174 @@ class TestMultiTransactionsPropertyAccess:
         self.multi_tx.sig_acc_txn(private_key_pem)
         assert self.multi_tx.signature is not None
 
+class TestMultiTransactionsSecureSignature:
+    """Test suite for MultiTransactions secure signature functionality with new multi-transaction methods."""
+    
+    @pytest.fixture
+    def setup_secure_signature(self):
+        """Set up test fixtures for secure signature testing."""
+        # Generate test keys
+        self.private_key = ec.generate_private_key(ec.SECP256R1())
+        self.public_key = self.private_key.public_key()
+        
+        # Serialize keys for testing
+        self.private_key_pem = self.private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        )
+        
+        self.public_key_pem = self.public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+        
+        self.sender = "0xSender123"
+        self.value = [Value("0x1000", 100)]
+        
+        # Create test transactions
+        self.tx1 = Transaction.new_transaction(
+            sender=self.sender,
+            recipient="0xRecipient1",
+            value=self.value,
+            nonce=1
+        )
+        
+        self.tx2 = Transaction.new_transaction(
+            sender=self.sender,
+            recipient="0xRecipient2",
+            value=self.value,
+            nonce=2
+        )
+        
+        self.multi_txns = [self.tx1, self.tx2]
+        self.multi_tx = MultiTransactions(
+            sender=self.sender,
+            multi_txns=self.multi_txns
+        )
+        
+    def test_secure_sign_multi_transaction(self, setup_secure_signature):
+        """Test secure multi-transaction signing with new method."""
+        # Sign the multi-transaction
+        self.multi_tx.sig_acc_txn(self.private_key_pem)
+        
+        # Verify signature is set
+        assert self.multi_tx.signature is not None
+        assert isinstance(self.multi_tx.signature, bytes)
+        assert self.multi_tx.digest is not None
+        assert isinstance(self.multi_tx.digest, str)
+        
+    def test_secure_signature_verification(self, setup_secure_signature):
+        """Test secure signature verification with new method."""
+        # Sign the multi-transaction
+        self.multi_tx.sig_acc_txn(self.private_key_pem)
+        
+        # Verify the signature should be valid
+        result = self.multi_tx.check_acc_txn_sig(self.public_key_pem)
+        assert result is True
+        
+    def test_secure_signature_data_structure(self, setup_secure_signature):
+        """Test that the signature data structure is correct for multi-transactions."""
+        # Sign the multi-transaction
+        self.multi_tx.sig_acc_txn(self.private_key_pem)
+        
+        # Verify that the signature data structure contains required fields
+        assert self.multi_tx.sender == self.sender
+        assert self.multi_tx.time is not None
+        assert len(self.multi_tx.multi_txns) == 2
+        
+        # Verify that transactions are properly structured
+        for txn in self.multi_tx.multi_txns:
+            assert hasattr(txn, 'sender')
+            assert hasattr(txn, 'recipient')
+            assert hasattr(txn, 'nonce')
+            assert hasattr(txn, 'time')
+            assert hasattr(txn, 'value')
+            
+    def test_secure_signature_different_keys(self, setup_secure_signature):
+        """Test secure signature with different key pairs."""
+        # Generate a different key pair
+        different_private_key = ec.generate_private_key(ec.SECP256R1())
+        different_public_key_pem = different_private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+        
+        # Sign with original key
+        self.multi_tx.sig_acc_txn(self.private_key_pem)
+        
+        # Verify with different key should fail
+        result = self.multi_tx.check_acc_txn_sig(different_public_key_pem)
+        assert result is False
+        
+    def test_secure_signature_empty_transactions(self, setup_secure_signature):
+        """Test that empty transaction list raises appropriate error."""
+        empty_multi_tx = MultiTransactions(
+            sender=self.sender,
+            multi_txns=[]
+        )
+        
+        with pytest.raises(ValueError) as context:
+            empty_multi_tx.sig_acc_txn(self.private_key_pem)
+            
+        assert "Cannot sign empty transaction list" in str(context.value)
+        
+    def test_secure_signature_multiple_signing(self, setup_secure_signature):
+        """Test multiple signing operations on same multi-transaction."""
+        # First signing
+        self.multi_tx.sig_acc_txn(self.private_key_pem)
+        first_signature = self.multi_tx.signature
+        first_digest = self.multi_tx.digest
+        
+        # Small delay to ensure different timestamp
+        import time
+        time.sleep(0.01)
+        
+        # Second signing (should overwrite)
+        self.multi_tx.sig_acc_txn(self.private_key_pem)
+        second_signature = self.multi_tx.signature
+        second_digest = self.multi_tx.digest
+        
+        # Signatures should be different due to different timestamps
+        assert first_signature != second_signature
+        # Digest might be the same if timestamp doesn't change enough, but signature should differ
+        
+    def test_secure_signature_verification_no_signature(self, setup_secure_signature):
+        """Test verification when no signature exists."""
+        # Don't sign the multi-transaction
+        result = self.multi_tx.check_acc_txn_sig(self.public_key_pem)
+        assert result is False
+        
+    def test_secure_signature_with_complex_transactions(self, setup_secure_signature):
+        """Test secure signature with more complex transaction data."""
+        # Create transactions with multiple values
+        complex_value1 = [Value("0x1000", 100), Value("0x2000", 200)]
+        complex_value2 = [Value("0x3000", 300), Value("0x4000", 400)]
+        
+        complex_tx1 = Transaction.new_transaction(
+            sender=self.sender,
+            recipient="0xComplexRecipient1",
+            value=complex_value1,
+            nonce=42
+        )
+        
+        complex_tx2 = Transaction.new_transaction(
+            sender=self.sender,
+            recipient="0xComplexRecipient2",
+            value=complex_value2,
+            nonce=43
+        )
+        
+        complex_multi_tx = MultiTransactions(
+            sender=self.sender,
+            multi_txns=[complex_tx1, complex_tx2]
+        )
+        
+        # Sign and verify
+        complex_multi_tx.sig_acc_txn(self.private_key_pem)
+        result = complex_multi_tx.check_acc_txn_sig(self.public_key_pem)
+        assert result is True
 
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

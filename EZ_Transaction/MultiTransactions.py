@@ -98,27 +98,21 @@ class MultiTransactions:
             raise ValueError("Cannot sign empty transaction list")
         
         # Prepare multi-transaction data for signing
-        multi_transaction_data = {
-            "sender": self.sender,
-            "time": self.time,
-            "transactions": [
-                {
-                    "sender": txn.sender,
-                    "recipient": txn.recipient,
-                    "nonce": txn.nonce,
-                    "timestamp": txn.time,
-                    "value": txn._serialize_values() if hasattr(txn, '_serialize_values') else []
-                }
-                for txn in self.multi_txns
-            ]
-        }
+        transactions_data = [
+            {
+                "sender": txn.sender,
+                "recipient": txn.recipient,
+                "nonce": txn.nonce,
+                "timestamp": txn.time,
+                "value": txn._serialize_values() if hasattr(txn, '_serialize_values') else []
+            }
+            for txn in self.multi_txns
+        ]
         
         # Use secure signature handler for multi-transaction signing
-        signature_result = secure_signature_handler.sign_transaction(
+        signature_result = secure_signature_handler.sign_multi_transaction(
             sender=self.sender,
-            recipient="multi_transaction",  # Special recipient for multi-transactions
-            nonce=len(self.multi_txns),  # Use transaction count as nonce
-            value_data=multi_transaction_data["transactions"],
+            transactions=transactions_data,
             private_key_pem=load_private_key,
             timestamp=self.time
         )
@@ -143,7 +137,7 @@ class MultiTransactions:
         # Prepare multi-transaction data for verification
         multi_transaction_data = {
             "sender": self.sender,
-            "time": self.time,
+            "timestamp": self.time,
             "transactions": [
                 {
                     "sender": txn.sender,
@@ -153,12 +147,13 @@ class MultiTransactions:
                     "value": txn._serialize_values() if hasattr(txn, '_serialize_values') else []
                 }
                 for txn in self.multi_txns
-            ]
+            ],
+            "type": "multi_transaction"
         }
         
-        # Use secure signature handler for verification
-        return secure_signature_handler.verify_transaction_signature(
-            transaction_data=multi_transaction_data,
+        # Use secure signature handler for multi-transaction verification
+        return secure_signature_handler.verify_multi_transaction_signature(
+            multi_transaction_data=multi_transaction_data,
             signature_hex=self.signature.hex(),
             public_key_pem=load_public_key
         )

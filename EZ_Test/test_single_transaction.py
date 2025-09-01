@@ -44,8 +44,7 @@ class TestTransactionInitialization(unittest.TestCase):
             nonce=self.nonce,
             signature=self.signature,
             value=self.value,
-            tx_hash=self.tx_hash,
-            time=self.time
+                        time=self.time
         )
         
         self.assertEqual(tx.sender, self.sender)
@@ -53,7 +52,7 @@ class TestTransactionInitialization(unittest.TestCase):
         self.assertEqual(tx.nonce, self.nonce)
         self.assertIsNone(tx.signature)
         self.assertEqual(tx.value, self.value)
-        self.assertIsNone(tx.tx_hash)
+        self.assertIsNotNone(tx.tx_hash)
         self.assertEqual(tx.time, self.time)
         
     def test_transaction_initialization_with_all_params(self):
@@ -68,12 +67,12 @@ class TestTransactionInitialization(unittest.TestCase):
             nonce=self.nonce,
             signature=test_signature,
             value=self.value,
-            tx_hash=test_hash,
-            time=test_time
+                        time=test_time
         )
         
         self.assertEqual(tx.signature, test_signature)
-        self.assertEqual(tx.tx_hash, test_hash)
+        self.assertIsNotNone(tx.tx_hash)
+        self.assertEqual(len(tx.tx_hash), 32)  # SHA-256 hash length
         self.assertEqual(tx.time, test_time)
 
 
@@ -92,8 +91,7 @@ class TestTransactionHashing(unittest.TestCase):
             nonce=self.nonce,
             signature=None,
             value=self.value,
-            tx_hash=None,
-            time=datetime.datetime.now().isoformat()
+                        time=datetime.datetime.now().isoformat()
         )
         
     def test_calculate_hash(self):
@@ -116,8 +114,7 @@ class TestTransactionHashing(unittest.TestCase):
             nonce=self.nonce,
             signature=None,
             value=self.value,
-            tx_hash=None,
-            time=datetime.datetime.now().isoformat()
+                        time=datetime.datetime.now().isoformat()
         )
         
         hash1 = self.tx._calculate_hash()
@@ -132,7 +129,7 @@ class TestTransactionHashing(unittest.TestCase):
         self.assertIn(f"Recipient: {self.recipient}", tx_str)
         self.assertIn(f"Nonce: {str(self.nonce)}", tx_str)
         self.assertIn(f"Value: {self.value}", tx_str)
-        self.assertIn("TxHash: None", tx_str)
+        self.assertIn("TxHash: b'", tx_str)
         self.assertIn(f"Time: {self.tx.time}", tx_str)
 
 
@@ -151,8 +148,7 @@ class TestTransactionSerialization(unittest.TestCase):
             nonce=self.nonce,
             signature=None,
             value=self.value,
-            tx_hash=None,
-            time=datetime.datetime.now().isoformat()
+                        time=datetime.datetime.now().isoformat()
         )
         
     def test_encode_transaction(self):
@@ -184,7 +180,6 @@ class TestTransactionSerialization(unittest.TestCase):
             nonce=42,
             signature=b'test_signature',
             value=[Value("0x5000", 500)],
-            tx_hash=b'test_hash',
             time='2023-01-01T00:00:00'
         )
         
@@ -297,8 +292,7 @@ class TestTransactionSignature(unittest.TestCase):
             nonce=1,
             signature=None,
             value=self.value,
-            tx_hash=None,
-            time=datetime.datetime.now().isoformat()
+                        time=datetime.datetime.now().isoformat()
         )
         
     def test_sign_transaction(self):
@@ -355,8 +349,7 @@ class TestTransactionValidationMethods(unittest.TestCase):
             nonce=1,
             signature=None,
             value=self.value,
-            tx_hash=None,
-            time=datetime.datetime.now().isoformat()
+                        time=datetime.datetime.now().isoformat()
         )
         
     def test_is_sent_to_self_true(self):
@@ -367,8 +360,7 @@ class TestTransactionValidationMethods(unittest.TestCase):
             nonce=1,
             signature=None,
             value=self.value,
-            tx_hash=None,
-            time=datetime.datetime.now().isoformat()
+                        time=datetime.datetime.now().isoformat()
         )
         
         self.assertTrue(tx.is_sent_to_self())
@@ -415,8 +407,7 @@ class TestTransactionValueOperations(unittest.TestCase):
             nonce=1,
             signature=None,
             value=self.value,
-            tx_hash=None,
-            time=datetime.datetime.now().isoformat()
+                        time=datetime.datetime.now().isoformat()
         )
         
         # Create test value for intersection operations
@@ -464,8 +455,7 @@ class TestTransactionOutputMethods(unittest.TestCase):
             nonce=1,
             signature=None,
             value=self.value,
-            tx_hash=None,
-            time=datetime.datetime.now().isoformat()
+                        time=datetime.datetime.now().isoformat()
         )
         
     def test_print_tx_format(self):
@@ -476,7 +466,7 @@ class TestTransactionOutputMethods(unittest.TestCase):
         self.assertIn(self.sender, output)
         self.assertIn(self.recipient, output)
         self.assertIn(str(self.value), output)
-        self.assertIn("None", output)  # tx_hash is None
+        self.assertIn("b'", output)  # tx_hash is now auto-calculated
         
     @patch('builtins.print')
     def test_print_txn_dst(self, mock_print):
@@ -506,8 +496,7 @@ class TestTransactionEdgeCases(unittest.TestCase):
             nonce=1,
             signature=None,
             value=[],
-            tx_hash=None,
-            time=datetime.datetime.now().isoformat()
+                        time=datetime.datetime.now().isoformat()
         )
         
         self.assertEqual(len(tx.value), 0)
@@ -528,8 +517,7 @@ class TestTransactionEdgeCases(unittest.TestCase):
             nonce=1,
             signature=None,
             value=values,
-            tx_hash=None,
-            time=datetime.datetime.now().isoformat()
+                        time=datetime.datetime.now().isoformat()
         )
         
         self.assertEqual(len(tx.value), 3)
@@ -548,8 +536,7 @@ class TestTransactionEdgeCases(unittest.TestCase):
             nonce=1,
             signature=None,
             value=values,
-            tx_hash=None,
-            time=datetime.datetime.now().isoformat()
+                        time=datetime.datetime.now().isoformat()
         )
         
         # Test list operations
@@ -571,8 +558,7 @@ class TestTransactionEdgeCases(unittest.TestCase):
             nonce=1,
             signature=None,
             value=values,
-            tx_hash=None,
-            time=datetime.datetime.now().isoformat()
+                        time=datetime.datetime.now().isoformat()
         )
         
         self.assertEqual(len(tx.value), 1000)
@@ -586,8 +572,7 @@ class TestTransactionEdgeCases(unittest.TestCase):
             nonce=1,
             signature="invalid_signature",
             value=[Value("0x1000", 100)],
-            tx_hash=None,
-            time=datetime.datetime.now().isoformat()
+                        time=datetime.datetime.now().isoformat()
         )
         
         self.assertEqual(tx.signature, "invalid_signature")
@@ -606,8 +591,7 @@ class TestTransactionTimeHandling(unittest.TestCase):
             nonce=1,
             signature=None,
             value=[Value("0x1000", 100)],
-            tx_hash=None,
-            time=test_time
+                        time=test_time
         )
         
         self.assertEqual(tx.time, test_time)
@@ -635,8 +619,7 @@ class TestTransactionTimeHandling(unittest.TestCase):
             nonce=1,
             signature=None,
             value=[Value("0x1000", 100)],
-            tx_hash=None,
-            time=test_time
+                        time=test_time
         )
         
         tx_str = tx.txn2str()

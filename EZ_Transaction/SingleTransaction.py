@@ -17,14 +17,15 @@ from EZ_Tool_Box.SecureSignature import secure_signature_handler
 from EZ_Value import Value
 
 class Transaction:
-    def __init__(self, sender: str, recipient: str, nonce: int, signature: Optional[bytes], value: List[Value], tx_hash: Optional[bytes], time: Optional[str]):
+    def __init__(self, sender: str, recipient: str, nonce: int, signature: Optional[bytes], value: List[Value], time: Optional[str]):
         self.sender = sender
         self.recipient = recipient
         self.nonce = nonce
         self.signature = signature
         self.value = value
-        self.tx_hash = tx_hash
         self.time = time
+        # Auto-calculate tx_hash based on all parameters except signature
+        self.tx_hash = self._calculate_hash()
 
     def _calculate_hash(self) -> bytes:
         """Calculate hash of the transaction using deterministic JSON serialization."""
@@ -147,19 +148,15 @@ class Transaction:
 
     @staticmethod
     def new_transaction(sender: str, recipient: str, value: List[Any], nonce: int) -> 'Transaction':
-        """Create a new transaction with hash calculation."""
-        tx = Transaction(
+        """Create a new transaction with automatic hash calculation."""
+        return Transaction(
             sender=sender,
             recipient=recipient,
             nonce=nonce,
             signature=None,
             value=value,
-            tx_hash=None,
             time=datetime.datetime.now().isoformat()
         )
-        encoded_tx = tx.encode()
-        tx.tx_hash = hashlib.sha256(encoded_tx).digest()
-        return tx
 
     def count_value_intersect_txn(self, value: Any) -> int:
         """Count the number of values that intersect with the given value."""

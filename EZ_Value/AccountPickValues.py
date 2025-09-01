@@ -24,7 +24,7 @@ class AccountPickValues:
         return added_count
     
     def pick_values_for_transaction(self, required_amount: int, sender: str, recipient: str, 
-                                 nonce: int, tx_hash: str, time: int) -> Tuple[List[Value], Optional[Value], Optional[Transaction], Optional[Transaction]]:
+                                 nonce: int, time: int) -> Tuple[List[Value], Optional[Value], Optional[Transaction], Optional[Transaction]]:
         """为交易选择Value，返回选中的值、找零、找零交易、主交易"""
         if required_amount < 1:
             raise ValueError("交易金额必须大于等于1")
@@ -81,7 +81,6 @@ class AccountPickValues:
                         nonce=nonce,
                         signature=None,
                         value=[v2],
-                        tx_hash=tx_hash,
                         time=time
                     )
                     
@@ -92,7 +91,6 @@ class AccountPickValues:
                         nonce=nonce,
                         signature=None,
                         value=[v1] + selected_values[:-1],
-                        tx_hash=tx_hash,
                         time=time
                     )
         else:
@@ -103,7 +101,6 @@ class AccountPickValues:
                 nonce=nonce,
                 signature=None,
                 value=selected_values,
-                tx_hash=tx_hash,
                 time=time
             )
         

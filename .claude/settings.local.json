@@ -11,7 +11,7 @@
   "env": {
     "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic",
     "ANTHROPIC_AUTH_TOKEN": "16a9a323577c48b1924e9419fb659a8b.WGN3k4rrfzemVY7L",
-    "ANTHROPIC_MODEL": "glm-4.5-air",
-    "ANTHROPIC_SMALL_FAST_MODEL": "glm-4.5-air"
+    "ANTHROPIC_MODEL": "glm-4.5",
+    "ANTHROPIC_SMALL_FAST_MODEL": "glm-4.5"
   }
 }

@@ -108,7 +108,7 @@ class CreateTransaction:
             "change_transaction": change_transaction,
             "selected_values": selected_values,
             "change_value": change_value,
-            "total_amount": sum(v.value_num for v in selected_values),
+            "total_amount": amount,
             "transaction_fee": 0  # Fee calculation can be added here
         }
         

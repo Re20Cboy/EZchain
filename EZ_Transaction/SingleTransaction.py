@@ -61,6 +61,22 @@ class Transaction:
                     "type": getattr(value, 'type', 'unknown')
                 })
         return serialized_values
+    
+    def _serialize_values_for_signing(self) -> list:
+        """Serialize Value objects for signature verification (excludes state)."""
+        serialized_values = []
+        for value in self.value:
+            # Use the signature-safe serialization method
+            if hasattr(value, 'to_dict_for_signing'):
+                serialized_values.append(value.to_dict_for_signing())
+            else:
+                # Fallback to basic attributes (exclude state)
+                serialized_values.append({
+                    "begin_index": getattr(value, 'begin_index', ''),
+                    "end_index": getattr(value, 'end_index', ''),
+                    "value_num": getattr(value, 'value_num', 0)
+                })
+        return serialized_values
 
     def txn2str(self):
         txn_str = f"Sender: {self.sender}\n"
@@ -81,21 +97,12 @@ class Transaction:
 
     def sig_txn(self, load_private_key: bytes) -> None:
         """Sign the transaction with the provided private key using secure signature handler."""
-        # Prepare transaction data for signing
-        transaction_data = {
-            "sender": self.sender,
-            "recipient": self.recipient,
-            "nonce": self.nonce,
-            "timestamp": self.time,
-            "value": self._serialize_values()
-        }
-        
-        # Use secure signature handler
+        # Use secure signature handler with signature-safe serialization
         signature_result = secure_signature_handler.sign_transaction(
             sender=self.sender,
             recipient=self.recipient,
             nonce=self.nonce,
-            value_data=self._serialize_values(),
+            value_data=self._serialize_values_for_signing(),
             private_key_pem=load_private_key,
             timestamp=self.time
         )
@@ -112,21 +119,28 @@ class Transaction:
         if self.signature is None:
             return False
         
-        # Prepare transaction data for verification
+        # Prepare transaction data for verification - must match the structure used during signing
         transaction_data = {
             "sender": self.sender,
             "recipient": self.recipient,
             "nonce": self.nonce,
             "timestamp": self.time,
-            "value": self._serialize_values()
+            "value": self._serialize_values_for_signing()
         }
         
+        # Debug: Print the transaction data being used for verification
+        print(f"DEBUG - Transaction data for verification: {transaction_data}")
+        print(f"DEBUG - Signature: {self.signature.hex()}")
+        
         # Use secure signature handler for verification
-        return secure_signature_handler.verify_transaction_signature(
+        result = secure_signature_handler.verify_transaction_signature(
             transaction_data=transaction_data,
             signature_hex=self.signature.hex(),
             public_key_pem=load_public_key
         )
+        
+        print(f"DEBUG - Verification result: {result}")
+        return result
 
     def get_values(self) -> List[Value]:
         """Get the list of values in this transaction."""

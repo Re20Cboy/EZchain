@@ -247,8 +247,15 @@ class SecureTransactionSignature:
         # Calculate transaction hash
         transaction_hash = hashlib.sha256(transaction_bytes).digest()
         
+        # Debug: Print the transaction data being used for signing
+        print(f"DEBUG - Transaction data for signing: {transaction_data}")
+        print(f"DEBUG - Transaction JSON: {transaction_json}")
+        print(f"DEBUG - Transaction hash: {transaction_hash.hex()}")
+        
         # Sign the transaction hash
         signature = self.signer.sign_transaction_data(transaction_hash, private_key_pem)
+        
+        print(f"DEBUG - Generated signature: {signature.hex()}")
         
         return {
             "transaction_data": transaction_data,
@@ -291,13 +298,21 @@ class SecureTransactionSignature:
             transaction_bytes = transaction_json.encode('utf-8')
             transaction_hash = hashlib.sha256(transaction_bytes).digest()
             
+            # Debug: Print the transaction data being used for verification
+            print(f"DEBUG - Signable data for verification: {signable_data}")
+            print(f"DEBUG - Transaction JSON: {transaction_json}")
+            print(f"DEBUG - Transaction hash: {transaction_hash.hex()}")
+            
             # Convert hex signature to bytes
             signature = bytes.fromhex(signature_hex)
             
             # Verify signature
-            return self.signer.verify_signature(transaction_hash, signature, public_key_pem)
+            result = self.signer.verify_signature(transaction_hash, signature, public_key_pem)
+            print(f"DEBUG - Signature verification result: {result}")
+            return result
             
-        except (KeyError, ValueError, Exception):
+        except (KeyError, ValueError, Exception) as e:
+            print(f"DEBUG - Exception during verification: {e}")
             return False
     
     def sign_multi_transaction(

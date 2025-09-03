@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
     from EZ_Transaction.SingleTransaction import Transaction
-    from EZ_Value.Value import Value
+    from EZ_Value.Value import Value, ValueState
 except ImportError as e:
     print(f"Error importing modules: {e}")
     sys.exit(1)
@@ -333,6 +333,76 @@ class TestTransactionSignature(unittest.TestCase):
         # When signature is None, verification should fail
         result = self.tx.check_txn_sig(self.public_key_pem)
         self.assertFalse(result)
+        
+    def test_signature_verification_with_state_change(self):
+        """Test that signature verification works even when value state changes."""
+        # Sign the transaction when value is in UNSPENT state
+        original_state = self.tx.value[0].state
+        self.assertEqual(original_state, ValueState.UNSPENT)
+        
+        # Sign the transaction
+        self.tx.sig_txn(self.private_key_pem)
+        
+        # Verify signature is valid with original state
+        result = self.tx.check_txn_sig(self.public_key_pem)
+        self.assertTrue(result)
+        
+        # Change the value state (simulating transaction lifecycle)
+        self.tx.value[0].set_state(ValueState.SELECTED)
+        
+        # Signature should still be valid even with state change
+        result = self.tx.check_txn_sig(self.public_key_pem)
+        self.assertTrue(result)
+        
+        # Change state again to LOCAL_COMMITTED
+        self.tx.value[0].set_state(ValueState.LOCAL_COMMITTED)
+        
+        # Signature should still be valid
+        result = self.tx.check_txn_sig(self.public_key_pem)
+        self.assertTrue(result)
+        
+        # Change state again to CONFIRMED
+        self.tx.value[0].set_state(ValueState.CONFIRMED)
+        
+        # Signature should still be valid
+        result = self.tx.check_txn_sig(self.public_key_pem)
+        self.assertTrue(result)
+        
+    def test_serialization_methods_consistency(self):
+        """Test that serialization methods work correctly."""
+        # Test _serialize_values includes state
+        regular_serialized = self.tx._serialize_values()
+        self.assertEqual(len(regular_serialized), 1)
+        self.assertIn("state", regular_serialized[0])
+        self.assertEqual(regular_serialized[0]["state"], ValueState.UNSPENT.value)
+        
+        # Test _serialize_values_for_signing excludes state
+        signing_serialized = self.tx._serialize_values_for_signing()
+        self.assertEqual(len(signing_serialized), 1)
+        self.assertNotIn("state", signing_serialized[0])
+        
+        # Both should contain the same essential value information
+        self.assertEqual(regular_serialized[0]["begin_index"], signing_serialized[0]["begin_index"])
+        self.assertEqual(regular_serialized[0]["end_index"], signing_serialized[0]["end_index"])
+        self.assertEqual(regular_serialized[0]["value_num"], signing_serialized[0]["value_num"])
+        
+    def test_value_to_dict_methods(self):
+        """Test that Value's to_dict methods work correctly."""
+        value = self.tx.value[0]
+        
+        # Test regular to_dict includes state
+        regular_dict = value.to_dict()
+        self.assertIn("state", regular_dict)
+        self.assertEqual(regular_dict["state"], ValueState.UNSPENT.value)
+        
+        # Test to_dict_for_signing excludes state
+        signing_dict = value.to_dict_for_signing()
+        self.assertNotIn("state", signing_dict)
+        
+        # Both should contain the same essential value information
+        self.assertEqual(regular_dict["begin_index"], signing_dict["begin_index"])
+        self.assertEqual(regular_dict["end_index"], signing_dict["end_index"])
+        self.assertEqual(regular_dict["value_num"], signing_dict["value_num"])
 
 
 class TestTransactionValidationMethods(unittest.TestCase):

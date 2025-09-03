@@ -360,6 +360,226 @@ class TestIntegrationCreateTransaction:
         assert len(main_tx.value) == 1
         assert main_tx.value[0].value_num == 300
 
+    def test_real_signature_verification(self, create_transaction, test_recipient, private_key_pem, public_key_pem):
+        """测试真实的签名验证功能"""
+        value_selector = create_transaction.value_selector
+        
+        # 添加测试Value
+        test_values = [Value("0x1000", 500)]
+        value_selector.add_values_from_list(test_values)
+        
+        # 创建交易
+        result = create_transaction.create_transaction(
+            recipient=test_recipient,
+            amount=300,
+            private_key_pem=private_key_pem
+        )
+        
+        # 验证主交易签名
+        main_tx = result["main_transaction"]
+        is_valid = create_transaction.verify_transaction_signature(main_tx, public_key_pem)
+        assert is_valid is True
+        
+        # 验证找零交易签名（如果存在）
+        if result["change_transaction"]:
+            change_tx = result["change_transaction"]
+            is_valid_change = create_transaction.verify_transaction_signature(change_tx, public_key_pem)
+            assert is_valid_change is True
+
+    def test_real_custom_nonce_usage(self, create_transaction, test_recipient, private_key_pem):
+        """测试使用自定义nonce创建交易"""
+        value_selector = create_transaction.value_selector
+        
+        # 添加测试Value
+        test_values = [Value("0x1000", 500)]
+        value_selector.add_values_from_list(test_values)
+        
+        # 使用自定义nonce创建交易
+        custom_nonce = 1234567890
+        result = create_transaction.create_transaction(
+            recipient=test_recipient,
+            amount=300,
+            private_key_pem=private_key_pem,
+            nonce=custom_nonce
+        )
+        
+        # 验证nonce设置正确
+        main_tx = result["main_transaction"]
+        assert main_tx.nonce == custom_nonce
+        
+        if result["change_transaction"]:
+            change_tx = result["change_transaction"]
+            assert change_tx.nonce == custom_nonce
+
+    def test_real_multiple_value_selection(self, create_transaction, test_recipient, private_key_pem):
+        """测试需要多个Value组合的交易"""
+        value_selector = create_transaction.value_selector
+        
+        # 添加多个小额Value
+        test_values = [
+            Value("0x1000", 100),
+            Value("0x2000", 200),
+            Value("0x3000", 150),
+            Value("0x4000", 250)
+        ]
+        value_selector.add_values_from_list(test_values)
+        
+        # 创建需要多个Value组合的交易
+        result = create_transaction.create_transaction(
+            recipient=test_recipient,
+            amount=500,  # 需要组合多个Value
+            private_key_pem=private_key_pem
+        )
+        
+        # 验证选择了多个Value
+        selected_values = result["selected_values"]
+        assert len(selected_values) >= 2
+        total_selected = sum(v.value_num for v in selected_values)
+        assert total_selected >= 500
+        
+        # 验证找零
+        if result["change_value"]:
+            expected_change = total_selected - 500
+            assert result["change_value"].value_num == expected_change
+
+    def test_real_transaction_details_printing(self, create_transaction, test_recipient, private_key_pem, capsys):
+        """测试交易详情打印功能"""
+        value_selector = create_transaction.value_selector
+        
+        # 添加测试Value
+        test_values = [Value("0x1000", 500)]
+        value_selector.add_values_from_list(test_values)
+        
+        # 创建交易
+        result = create_transaction.create_transaction(
+            recipient=test_recipient,
+            amount=300,
+            private_key_pem=private_key_pem
+        )
+        
+        # 打印交易详情
+        create_transaction.print_transaction_details(result)
+        
+        # 验证输出内容
+        captured = capsys.readouterr()
+        assert "Transaction Details" in captured.out
+        assert test_recipient in captured.out
+        assert "300" in captured.out  # 交易金额
+        assert "Change Value" in captured.out  # 找零信息
+
+    def test_real_account_integrity_validation(self, create_transaction, value_selector):
+        """测试账户完整性验证"""
+        # 初始状态应该有效
+        assert create_transaction.validate_account_integrity() is True
+        
+        # 添加Value后应该仍然有效
+        test_values = [Value("0x1000", 500), Value("0x2000", 300)]
+        value_selector.add_values_from_list(test_values)
+        assert create_transaction.validate_account_integrity() is True
+        
+        # 创建交易后应该仍然有效
+        result = create_transaction.create_transaction(
+            recipient="0xTestRecipient",
+            amount=400,
+            private_key_pem=self.private_key_pem()
+        )
+        assert create_transaction.validate_account_integrity() is True
+
+    def test_real_error_handling_scenarios(self, create_transaction, test_recipient):
+        """测试各种错误处理场景"""
+        value_selector = create_transaction.value_selector
+        
+        # 1. 测试空账户创建交易
+        with pytest.raises(ValueError, match="余额不足"):
+            create_transaction.create_transaction(
+                recipient=test_recipient,
+                amount=100,
+                private_key_pem=self.private_key_pem()
+            )
+        
+        # 2. 测试零金额交易
+        test_values = [Value("0x1000", 500)]
+        value_selector.add_values_from_list(test_values)
+        
+        with pytest.raises(ValueError, match="余额不足"):
+            create_transaction.create_transaction(
+                recipient=test_recipient,
+                amount=0,
+                private_key_pem=self.private_key_pem()
+            )
+        
+        # 3. 测试负金额交易
+        with pytest.raises(ValueError, match="余额不足"):
+            create_transaction.create_transaction(
+                recipient=test_recipient,
+                amount=-100,
+                private_key_pem=self.private_key_pem()
+            )
+
+    def test_real_transaction_rollback_scenario(self, create_transaction, test_recipient, private_key_pem):
+        """测试交易回滚场景"""
+        value_selector = create_transaction.value_selector
+        
+        # 添加初始Value
+        test_values = [Value("0x1000", 1000)]
+        value_selector.add_values_from_list(test_values)
+        
+        # 记录初始状态
+        initial_balance = value_selector.get_account_balance(ValueState.UNSPENT)
+        assert initial_balance == 1000
+        
+        # 创建交易
+        result = create_transaction.create_transaction(
+            recipient=test_recipient,
+            amount=700,
+            private_key_pem=private_key_pem
+        )
+        
+        # 验证交易创建后的状态
+        committed_values = value_selector.get_account_values(ValueState.LOCAL_COMMITTED)
+        assert len(committed_values) >= 1
+        
+        # 验证可以通过确认交易来完成流程
+        confirmation_result = create_transaction.confirm_transaction(result)
+        assert confirmation_result is True
+        
+        # 验证确认后的状态
+        confirmed_values = value_selector.get_account_values(ValueState.CONFIRMED)
+        assert len(confirmed_values) >= 1
+
+    def test_real_concurrent_transaction_creation(self, create_transaction, test_recipient, private_key_pem):
+        """测试并发交易创建"""
+        value_selector = create_transaction.value_selector
+        
+        # 添加足够的Value支持多笔并发交易
+        test_values = [
+            Value("0x1000", 500),
+            Value("0x2000", 500),
+            Value("0x3000", 500),
+            Value("0x4000", 500)
+        ]
+        value_selector.add_values_from_list(test_values)
+        
+        # 快速连续创建多笔交易
+        results = []
+        for i in range(3):
+            result = create_transaction.create_transaction(
+                recipient=f"{test_recipient}_{i}",
+                amount=300,
+                private_key_pem=private_key_pem
+            )
+            results.append(result)
+        
+        # 验证所有交易都创建成功
+        assert len(results) == 3
+        assert len(create_transaction.created_transactions) == 3
+        
+        # 验证每笔交易都有正确的结构
+        for i, result in enumerate(results):
+            assert result["main_transaction"] is not None
+            assert result["total_amount"] == 300
+            assert result["main_transaction"].recipient == f"{test_recipient}_{i}"
+
     def teardown_method(self):
         """清理测试环境"""
         # 可选：清理测试数据，避免影响其他测试

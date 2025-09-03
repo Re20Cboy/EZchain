@@ -136,3 +136,11 @@ class Value:  # 针对VCB区块链的专门设计的值结构，总量2^259 = 16
             "value_num": self.value_num,
             "state": self.state.value
         }
+    
+    def to_dict_for_signing(self) -> dict:
+        """Convert Value to dictionary for signature serialization (excludes state)."""
+        return {
+            "begin_index": self.begin_index,
+            "end_index": self.end_index,
+            "value_num": self.value_num
+        }

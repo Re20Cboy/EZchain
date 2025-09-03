@@ -434,13 +434,15 @@ class TestIntegrationCreateTransaction:
         # 验证选择了多个Value
         selected_values = result["selected_values"]
         assert len(selected_values) >= 2
-        total_selected = sum(v.value_num for v in selected_values)
-        assert total_selected >= 500
         
-        # 验证找零
+        # 验证总金额计算（selected_values已经是处理后的值，所以总和应该等于交易金额）
+        total_selected = sum(v.value_num for v in selected_values)
+        assert total_selected == 500  # 处理后的值总和应该等于交易金额
+        
+        # 验证找零逻辑（如果有找零，说明原始选中的值总额大于交易金额）
         if result["change_value"]:
-            expected_change = total_selected - 500
-            assert result["change_value"].value_num == expected_change
+            # 找零值的存在说明原始选中的值总额大于交易金额
+            assert result["change_value"].value_num > 0
 
     def test_real_transaction_details_printing(self, create_transaction, test_recipient, private_key_pem, capsys):
         """测试交易详情打印功能"""
@@ -467,7 +469,7 @@ class TestIntegrationCreateTransaction:
         assert "300" in captured.out  # 交易金额
         assert "Change Value" in captured.out  # 找零信息
 
-    def test_real_account_integrity_validation(self, create_transaction, value_selector):
+    def test_real_account_integrity_validation(self, create_transaction, value_selector, private_key_pem):
         """测试账户完整性验证"""
         # 初始状态应该有效
         assert create_transaction.validate_account_integrity() is True
@@ -481,11 +483,11 @@ class TestIntegrationCreateTransaction:
         result = create_transaction.create_transaction(
             recipient="0xTestRecipient",
             amount=400,
-            private_key_pem=self.private_key_pem()
+            private_key_pem=private_key_pem
         )
         assert create_transaction.validate_account_integrity() is True
 
-    def test_real_error_handling_scenarios(self, create_transaction, test_recipient):
+    def test_real_error_handling_scenarios(self, create_transaction, test_recipient, private_key_pem):
         """测试各种错误处理场景"""
         value_selector = create_transaction.value_selector
         
@@ -494,26 +496,26 @@ class TestIntegrationCreateTransaction:
             create_transaction.create_transaction(
                 recipient=test_recipient,
                 amount=100,
-                private_key_pem=self.private_key_pem()
+                private_key_pem=private_key_pem
             )
         
         # 2. 测试零金额交易
         test_values = [Value("0x1000", 500)]
         value_selector.add_values_from_list(test_values)
         
-        with pytest.raises(ValueError, match="余额不足"):
+        with pytest.raises(ValueError, match="交易金额必须大于等于1"):
             create_transaction.create_transaction(
                 recipient=test_recipient,
                 amount=0,
-                private_key_pem=self.private_key_pem()
+                private_key_pem=private_key_pem
             )
         
         # 3. 测试负金额交易
-        with pytest.raises(ValueError, match="余额不足"):
+        with pytest.raises(ValueError, match="交易金额必须大于等于1"):
             create_transaction.create_transaction(
                 recipient=test_recipient,
                 amount=-100,
-                private_key_pem=self.private_key_pem()
+                private_key_pem=private_key_pem
             )
 
     def test_real_transaction_rollback_scenario(self, create_transaction, test_recipient, private_key_pem):

@@ -15,3 +15,6 @@
 25.9.3
 1）test_integration_creat_single_transaction.py测试中test_real_multiple_value_selection的检测逻辑错误，其将total_selected = sum(v.value_num for v in selected_values)，selected_values已经是被分割后的值，因此total_selected恒等于500，后续检测逻辑并未意识到selected_values已经是被分割后的值。
 2）test_integration_creat_single_transaction.py测试中还存在其他错误。
+
+25.9.3
+1）新建CreateMultiTransactions.py，暂未debug。
